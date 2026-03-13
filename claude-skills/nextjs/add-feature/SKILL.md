@@ -1,0 +1,175 @@
+---
+name: add-feature
+description: Use when adding a new domain area (e.g., projects, auth, analytics) that needs its own components, hooks, API services, and types under src/features/.
+---
+
+# Add a Feature Module
+
+Create a new self-contained feature module in a Next.js project scaffolded from templateCentral.
+
+## Inputs
+
+- **Feature name** — The domain name (e.g., `project`, `auth`, `dashboard`)
+
+## Steps
+
+### 1. Create the Feature Directory Structure
+
+```
+src/features/<feature-name>/
+├── api/                         # Data access services (HTTP calls to /api/* routes)
+│   ├── <name>-service.ts        # Service with fetch calls to /api/*
+│   └── index.ts
+├── components/                  # Feature-specific UI
+│   └── index.ts
+├── hooks/                       # React hooks (queries, mutations, local state)
+│   └── index.ts
+├── schemas/                     # Zod validation schemas (create when feature uses form validation or API response parsing)
+├── constants.ts                 # Static data (arrays, config objects, options)
+├── types.ts                     # TypeScript interfaces and types
+└── index.ts                     # Barrel export
+```
+
+> **Why this structure**: Each feature is self-contained — its own types, components, hooks, and API layer. This means you can delete a feature folder and nothing outside breaks. The barrel `index.ts` controls the public API, hiding internal details.
+
+### 2. Create `types.ts`
+
+Define all TypeScript types and interfaces for this feature's domain first — this establishes the contract before any implementation:
+
+```ts
+export interface ProjectItem {
+  id: string;
+  name: string;
+  status: 'active' | 'archived';
+}
+```
+
+### 3. Create `constants.ts`
+
+Put all static data here — NOT in components. This prevents unnecessary re-renders and makes data reusable across the feature:
+
+```ts
+export const STATUS_OPTIONS = [
+  { value: 'active', label: 'Active' },
+  { value: 'archived', label: 'Archived' },
+] as const;
+```
+
+### 4. Create API Services (in `api/`)
+
+Data access services consumed by React Query hooks on the client side:
+
+```ts
+// api/project-service.ts
+import type { ProjectItem } from '../types';
+
+export const ProjectService = {
+  getAll: async (): Promise<ProjectItem[]> => {
+    const res = await fetch('/api/projects');
+    if (!res.ok) throw new Error('Failed to fetch projects');
+    return res.json();
+  },
+
+  getById: async (id: string): Promise<ProjectItem> => {
+    const res = await fetch(`/api/projects/${id}`);
+    if (!res.ok) throw new Error('Project not found');
+    return res.json();
+  },
+
+  create: async (data: Omit<ProjectItem, 'id'>): Promise<ProjectItem> => {
+    const res = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to create project');
+    return res.json();
+  },
+};
+```
+
+Export from barrel: `api/index.ts`
+
+### 5. Create Components (in `components/`)
+
+Feature-specific components. Use `function` declarations:
+
+```tsx
+// components/project-card.tsx
+import type { ProjectItem } from '../types';
+
+export function ProjectCard({ project }: { project: ProjectItem }) {
+  return (
+    <div className="rounded-lg border p-4">
+      <h3 className="font-semibold">{project.name}</h3>
+      <span className="text-sm text-muted-foreground">{project.status}</span>
+    </div>
+  );
+}
+```
+
+Export from barrel: `components/index.ts`
+
+### 6. Create Hooks (in `hooks/`)
+
+Follow naming convention:
+
+| Suffix | Purpose |
+|--------|---------|
+| `.query.ts` | React Query `useQuery` — fetches from `/api/*` |
+| `.mutation.ts` | React Query `useMutation` — writes to `/api/*` |
+| (no suffix) | Local state, form logic, other hooks |
+
+```ts
+// hooks/use-projects.query.ts
+import { useQuery } from '@tanstack/react-query';
+import { ProjectService } from '../api';
+
+export const useProjects = () => {
+  return useQuery({
+    queryKey: ['projects'],
+    queryFn: ProjectService.getAll,
+  });
+};
+```
+
+Export from barrel: `hooks/index.ts`
+
+### 7. Create Root Barrel Export
+
+```ts
+// index.ts
+export * from './components';
+export * from './hooks';
+export type { ProjectItem } from './types';
+```
+
+Export types that consumers need (e.g., for typed props or state).
+
+If the feature has client-side data access services (hooks that call `/api/*`), also export the API layer:
+
+```ts
+export * from './api';
+```
+
+Only export what consumers outside the feature need.
+
+### 8. Validate
+
+After creating all files:
+1. Run `pnpm build` — confirm no TypeScript errors
+2. Verify imports resolve: `import { X } from '@/features/<name>'` works from outside the feature
+3. If hooks use React Query, verify the query key is unique across the project
+
+## Rules
+
+All `code-standards/` rules apply. Key rules for features:
+
+- **Barrel imports** from outside: `import { X } from '@/features/<name>'`
+- **Direct imports** OK within the same feature
+- **Static data** in `constants.ts`, NEVER inline in components
+- If a component is used by 2+ features, promote it to `src/components/widgets/`
+- NEVER import from one feature into another — promote shared code to `components/widgets/` or `lib/`
+- NEVER place feature-specific components in `src/components/widgets/` until used by 2+ features
+- NEVER export internal implementation details from the barrel — only the public API
+- NEVER skip creating `types.ts` — define interfaces before building components

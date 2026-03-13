@@ -1,0 +1,134 @@
+---
+name: add-integration
+description: Use when connecting to an external API (e.g., GitHub, Stripe, OpenAI) and need a client, Zod response schemas, service layer, and factory pattern.
+---
+
+# Add an External Integration
+
+Create a new third-party API integration in a Next.js project scaffolded from templateCentral.
+
+## Inputs
+
+- **Service name** — The external service (e.g., `github`, `stripe`, `cloudformation`)
+- **Base URL** — The API base URL
+
+## Architecture
+
+```
+Environment → factories.ts → services/ → clients/ → schemas/
+```
+
+- **clients/** — Thin HTTP clients that make requests
+- **schemas/** — Zod schemas for validating external responses
+- **services/** — Business logic wrapping the client
+- **factories.ts** — Factory functions for creating service instances (at `src/integrations/factories.ts`)
+- **error.ts** — Custom `APIError` class (at `src/integrations/error.ts`)
+
+## Steps
+
+### 1. Create the Client
+
+Extend the base `FetchClient` (at `src/integrations/clients/base/fetch-client.ts`) which handles response parsing, error mapping, and content-type negotiation:
+
+```ts
+// src/integrations/clients/github-client.ts
+import { FetchClient } from './base/fetch-client';
+import type { GithubRepo } from '../schemas/github-schemas';
+
+export class GithubClient extends FetchClient {
+  constructor(baseUrl: string, token: string) {
+    super(baseUrl, { Authorization: `Bearer ${token}` });
+  }
+
+  async getRepos() {
+    return this.request<GithubRepo[]>('user/repos');
+  }
+
+  async getRepo(owner: string, repo: string) {
+    return this.request<GithubRepo>(`repos/${owner}/${repo}`);
+  }
+}
+```
+
+> **Why extend FetchClient**: It handles JSON/binary/text content-type parsing, maps HTTP errors to `APIError` with status codes and response data, and provides typed `request<T>()`. You focus only on endpoint paths and types.
+
+### 2. Create Zod Schemas
+
+```ts
+// src/integrations/schemas/github-schemas.ts
+import { z } from 'zod';
+
+export const githubRepoSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  full_name: z.string(),
+  private: z.boolean(),
+});
+
+export type GithubRepo = z.infer<typeof githubRepoSchema>;
+```
+
+### 3. Create the Service
+
+```ts
+// src/integrations/services/github-service.ts
+import type { GithubClient } from '../clients/github-client';
+import { githubRepoSchema, type GithubRepo } from '../schemas/github-schemas';
+
+export class GithubService {
+  constructor(private readonly client: GithubClient) {}
+
+  async getRepos(): Promise<GithubRepo[]> {
+    const data = await this.client.getRepos();
+    return githubRepoSchema.array().parse(data);
+  }
+}
+```
+
+### 4. Add Factory Function
+
+```ts
+// src/integrations/factories.ts
+import { GithubClient } from './clients/github-client';
+import { GithubService } from './services/github-service';
+
+export function Github() {
+  const client = new GithubClient(
+    process.env.GITHUB_API_URL ?? 'https://api.github.com',
+    process.env.GITHUB_TOKEN ?? '',
+  );
+  return new GithubService(client);
+}
+```
+
+> **Naming convention**: Factory functions use PascalCase matching the integration name: `Github()`, `DB()`, `Stripe()`, `SSM()`. This matches the appCentral pattern.
+
+> **Alternative: Axios-based client** — For server-side integrations needing mTLS, API key headers, or request/response logging, use `createAxiosClient` from `src/integrations/clients/base/axios-client.ts` instead of extending `FetchClient`.
+
+### 5. Consume via Factory
+
+In feature services or API routes:
+
+```ts
+import { Github } from '@/integrations/factories';
+
+const repos = await Github().getRepos();
+```
+
+### 6. Validate
+
+```bash
+pnpm build
+```
+
+Confirm the build succeeds with no type errors. Verify the integration works end-to-end in the browser or via API route.
+
+## Rules
+
+- Clients are thin — they only make HTTP requests. NEVER put business logic in clients
+- Schemas validate external responses with Zod — NEVER skip validation on external API responses
+- Services contain business logic and call clients
+- Factories create configured service instances
+- Always throw `APIError` for HTTP failures (imported from `@/integrations/error`) — NEVER throw generic `Error`
+- Environment variables go in `.env.local`, referenced via `process.env` — NEVER hardcode API URLs or secrets
+- NEVER consume integrations directly in components — go through feature services or API routes
