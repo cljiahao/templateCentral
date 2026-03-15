@@ -84,7 +84,9 @@ pnpm test
 
 Confirm all tests pass (there may be zero tests initially — that is expected).
 
-### 10. Generate Project AGENTS.md
+### 10. Generate Project AGENTS.md (MANDATORY)
+
+**This step is NOT optional. Do NOT skip it. Scaffolding is incomplete without a project AGENTS.md.**
 
 Create `AGENTS.md` in the project root. This gives any AI agent (Cursor, Codex, Copilot, Windsurf, etc.) permanent context about this specific project.
 
@@ -185,3 +187,4 @@ This template follows these conventions:
 - Remove example code only after the user confirms the project runs
 - NEVER copy `node_modules/`, `.next/`, or `.env.local` — these are project-specific
 - NEVER scaffold into a non-empty directory without confirming with the user
+- NEVER consider scaffolding complete without a project `AGENTS.md` — verify it exists before handing off to the user

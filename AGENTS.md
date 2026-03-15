@@ -103,11 +103,13 @@ Then execute. If any step produces an unexpected result, stop and reassess befor
 
 ## Project Memory
 
-Every scaffolded project gets its own `AGENTS.md` at the project root. This is editor-agnostic — it works with Cursor, Codex, Copilot, Windsurf, and any AI tool that reads `AGENTS.md`. The file:
+Every scaffolded project **MUST** get its own `AGENTS.md` at the project root. This is editor-agnostic — it works with Cursor, Codex, Copilot, Windsurf, and any AI tool that reads `AGENTS.md`. The file:
 - Records the stack, template source, and creation date
 - Documents architecture decisions and key conventions
 - Provides a "Project-Specific Notes" section for ongoing decisions
 - Optionally includes a task management directive for complex features
+
+**Scaffolding is NOT complete until the project `AGENTS.md` exists.** Before handing off to the user, verify the file was created. If it is missing, create it immediately — this is a hard requirement, not optional.
 
 When working inside a scaffolded project, **read the project's `AGENTS.md` first** — it contains project-specific context that overrides general template conventions.
 

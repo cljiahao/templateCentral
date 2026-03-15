@@ -92,7 +92,9 @@ Optionally run tests to verify the template is healthy:
 pnpm test
 ```
 
-### 10. Generate Project AGENTS.md
+### 10. Generate Project AGENTS.md (MANDATORY)
+
+**This step is NOT optional. Do NOT skip it. Scaffolding is incomplete without a project AGENTS.md.**
 
 Create `AGENTS.md` in the project root. This gives any AI agent (Cursor, Codex, Copilot, Windsurf, etc.) permanent context about this specific project.
 
@@ -186,5 +188,6 @@ Skip for simple changes (single-file edits, scaffolding, quick fixes).
 - Remove example code only after the user confirms the project runs
 - NEVER copy `node_modules/` or `dist/` when scaffolding
 - NEVER scaffold into a non-empty directory without confirming with the user
+- NEVER consider scaffolding complete without a project `AGENTS.md` — verify it exists before handing off to the user
 - NEVER add server-side code (RSC, API route handlers, SSR) — this is a client-only SPA
 - NEVER use `process.env` — use `import.meta.env.VITE_*` for environment variables

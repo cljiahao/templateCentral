@@ -76,7 +76,9 @@ pnpm test:e2e
 
 **Checkpoint**: All tests must pass. If any fail, fix before proceeding.
 
-### 6. Generate Project AGENTS.md
+### 6. Generate Project AGENTS.md (MANDATORY)
+
+**This step is NOT optional. Do NOT skip it. Scaffolding is incomplete without a project AGENTS.md.**
 
 Create `AGENTS.md` in the project root. This gives any AI agent (Cursor, Codex, Copilot, Windsurf, etc.) permanent context about this specific project.
 
@@ -169,6 +171,7 @@ See `AGENT.md` for the full architecture diagram and dependency flow rules.
 - Remove example code only after the user confirms the project runs
 - NEVER copy `node_modules/`, `dist/`, or `.env` when scaffolding
 - NEVER scaffold into a non-empty directory without confirming with the user
+- NEVER consider scaffolding complete without a project `AGENTS.md` — verify it exists before handing off to the user
 - NEVER remove the `base/` module — it provides the health check endpoint
 - NEVER install packages globally — always use pnpm/npm within the project
 - NEVER remove `test/` directory structure when cleaning up example code
