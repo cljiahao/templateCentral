@@ -3,9 +3,9 @@ import { Providers } from '@/components/layout/providers';
 
 export default function DashboardLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode;
-}) {
+}>) {
   return (
     <Providers>
       <div className="flex min-h-screen flex-col">

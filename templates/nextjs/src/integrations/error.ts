@@ -1,4 +1,4 @@
-const isRecord = (x: unknown): x is Record<string, unknown> =>
+export const isRecord = (x: unknown): x is Record<string, unknown> =>
   typeof x === 'object' && x !== null;
 
 function safeStringify(x: unknown): string {

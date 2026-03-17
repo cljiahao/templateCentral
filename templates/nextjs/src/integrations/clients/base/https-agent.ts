@@ -10,15 +10,20 @@ export interface HttpsAgentOptions {
   passphrase?: string;
 }
 
+const DEFAULT_AGENT_OPTIONS: HttpsAgentOptions = {
+  rejectUnauthorized: process.env.NODE_ENV === 'production',
+  keepAlive: true,
+  maxSockets: 50,
+};
+
 export function createHttpsAgent(options?: HttpsAgentOptions): https.Agent {
-  return new https.Agent({
-    rejectUnauthorized: process.env.NODE_ENV === 'production',
-    keepAlive: true,
-    maxSockets: 50,
-    ...options,
-  });
+  return new https.Agent({ ...DEFAULT_AGENT_OPTIONS, ...options });
 }
 
+/**
+ * Normalises a PEM string that may be JSON-wrapped or contain escaped
+ * newlines (common when loaded from environment variables).
+ */
 export function normalizePem(pem: string): string {
   if (pem.trim().startsWith('{')) {
     try {
