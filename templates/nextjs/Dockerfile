@@ -1,5 +1,6 @@
 # ---- Global build arguments ----
-# NODE:           Base Node.js image (pinned for reproducible builds)
+# NODE:           Base Node.js image (pinned for reproducible builds).
+#                 Override with a hardened image via --build-arg NODE=dhi.io/...
 # APP_UID/GID:    Non-root user/group IDs for container security
 # APP_USERNAME:   Non-root username inside the container
 # APP_GROUPNAME:  Non-root group name inside the container
@@ -16,8 +17,14 @@ ARG PORT=3000
 # ---- Base ----
 # Shared Alpine + Node foundation. All dependency/build stages inherit from here
 # so that OS-level packages (tzdata) are only installed once.
+# The non-root user is created here so /etc/passwd and /etc/group can be copied
+# into prod images that may not have `adduser`/`addgroup` (e.g. hardened images).
 FROM ${NODE} AS base
 ARG APP_DIR
+ARG APP_UID
+ARG APP_GID
+ARG APP_USERNAME
+ARG APP_GROUPNAME
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -27,6 +34,9 @@ RUN apk add --no-cache tzdata \
     && apk upgrade --no-cache \
     && cp /usr/share/zoneinfo/Asia/Singapore /etc/localtime \
     && echo "Asia/Singapore" > /etc/timezone
+
+RUN addgroup -g ${APP_GID} ${APP_GROUPNAME} && \
+    adduser -S -u ${APP_UID} -h ${APP_DIR} -s /sbin/nologin -G ${APP_GROUPNAME} ${APP_USERNAME}
 
 # ---- Prisma (conditional) ----
 # Copies prisma/ directory if it exists. When a project doesn't use Prisma,
@@ -82,8 +92,6 @@ CMD ["dev"]
 FROM base AS prod
 ARG APP_UID
 ARG APP_GID
-ARG APP_USERNAME
-ARG APP_GROUPNAME
 ARG APP_DIR
 ARG PORT
 
@@ -91,9 +99,6 @@ ENV NODE_ENV="production" \
     NODE_OPTIONS=--max-old-space-size=384 \
     PORT=${PORT} \
     HOSTNAME="0.0.0.0"
-
-RUN addgroup -g ${APP_GID} ${APP_GROUPNAME} && \
-    adduser -S -u ${APP_UID} -h ${APP_DIR} -s /sbin/nologin -G ${APP_GROUPNAME} ${APP_USERNAME}
 
 COPY --chown=${APP_UID}:${APP_GID} --from=builder ${APP_DIR}/public ./public
 COPY --chown=${APP_UID}:${APP_GID} --from=builder ${APP_DIR}/.next/standalone ./
