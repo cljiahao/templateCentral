@@ -1,10 +1,12 @@
-import { Providers } from '@/components/layout/providers';
+import { ErrorBoundary, Providers } from '@/components/layout';
 import { AppRouter } from '@/router';
 
 export function App() {
   return (
-    <Providers>
-      <AppRouter />
-    </Providers>
+    <ErrorBoundary>
+      <Providers>
+        <AppRouter />
+      </Providers>
+    </ErrorBoundary>
   );
 }

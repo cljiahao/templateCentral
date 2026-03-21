@@ -7,10 +7,14 @@ A production-ready Vite + React SPA starter with TypeScript, Tailwind CSS 4, Rea
 | Feature | Value |
 |---------|-------|
 | Build | Vite 8 |
-| UI | React 19, TypeScript 5.8 |
-| Styling | Tailwind CSS 4, tw-animate-css |
+| UI | React 19, TypeScript 5.9 |
+| Styling | Tailwind CSS 4, tw-animate-css, shadcn/ui (new-york) |
 | Routing | React Router 7 |
 | State | TanStack React Query 5 |
+| UI Components | shadcn/ui primitives (Radix UI, CVA, Lucide icons) |
+| Forms | React Hook Form, @hookform/resolvers, Zod |
+| Animation | Framer Motion |
+| Auth | AuthProvider context with dev bypass |
 | Toasts | Sonner |
 | Testing | Vitest, Testing Library |
 | Linting | ESLint 9, Prettier (organize-imports + tailwind) |
@@ -45,11 +49,13 @@ src/
 ├── styles/
 │   └── globals.css              # Tailwind config, CSS custom properties, utilities
 ├── components/
-│   ├── layout/                  # App shell: Navbar, Footer, RootLayout, Providers
+│   ├── layout/                  # App shell: Navbar, Footer, RootLayout, Providers, ErrorBoundary
 │   │   └── index.ts
+│   ├── ui/                      # shadcn/ui primitives (managed via CLI or manual)
 │   └── widgets/                 # Reusable composed components (used by 2+ features)
 │       └── index.ts
 ├── features/                    # Feature modules (self-contained domain areas)
+│   ├── auth/                    # Auth feature (AuthProvider, ProtectedRoute, LoginCard, useAuth)
 │   └── example/
 │       ├── api/                 # Data access services
 │       ├── components/          # Feature-specific UI
@@ -61,10 +67,10 @@ src/
 │   ├── clients/                 # Base HTTP clients (FetchClient)
 │   ├── constants/               # Routes, env vars, app-wide constants
 │   ├── errors/                  # APIError class, error logging
-│   ├── utils/                   # cn() and other pure utilities
-│   └── index.ts                 # Barrel export
+│   └── utils/                   # cn() and other pure utilities
 ├── pages/                       # Page components (thin — compose from features)
 │   ├── home.tsx
+│   ├── login.tsx
 │   ├── dashboard.tsx
 │   ├── not-found.tsx
 │   └── index.ts
@@ -78,6 +84,24 @@ src/
 - **Barrel exports**: `index.ts` in every shared folder. Import from barrel outside the feature: `import { X } from '@/features/example'`.
 - **Shared infrastructure**: `src/lib/` holds utilities, constants, and error handling used across the app.
 - **Component placement**: Feature-only → `features/<name>/components/`; shared by 2+ features → `components/widgets/`; app shell → `components/layout/`.
+
+## UI Component Library
+
+The template includes a full set of shadcn/ui-compatible components in `src/components/ui/`. These are the same components used in the Next.js template, adapted for client-only usage (no `'use client'` directives, no `next-themes`).
+
+### Adding Components via CLI
+
+A `components.json` is included at the project root with `rsc: false` for shadcn CLI compatibility:
+
+```bash
+npx shadcn@latest add [component-name]
+```
+
+### Included Components
+
+**UI Primitives** (`src/components/ui/`): accordion, avatar, button, button-group, card, checkbox, dialog, dropdown-menu, field, form, input, input-group, label, select, separator, skeleton, sonner, tabs, textarea
+
+**Widgets** (`src/components/widgets/`): brand-text, custom-card, custom-dialog, custom-form-field, link-list, media-card, pill
 
 ## Customization
 

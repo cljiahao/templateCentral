@@ -1,4 +1,5 @@
 import { PAGE_ROUTES } from '@/lib/constants/routes';
+import { cn } from '@/lib/utils';
 import { Link, useLocation } from 'react-router';
 
 const NAV_LINKS = [
@@ -21,9 +22,10 @@ export function Navbar() {
             <Link
               key={link.href}
               to={link.href}
-              className={`text-sm font-medium transition-colors hover:text-primary ${
+              className={cn(
+                'text-sm font-medium transition-colors hover:text-primary',
                 pathname === link.href ? 'text-primary' : 'text-muted-foreground'
-              }`}
+              )}
             >
               {link.label}
             </Link>

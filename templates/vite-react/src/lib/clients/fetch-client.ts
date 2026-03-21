@@ -1,4 +1,4 @@
-import { APIError } from '@/lib/errors/api-error';
+import { APIError } from '@/lib/errors';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 
