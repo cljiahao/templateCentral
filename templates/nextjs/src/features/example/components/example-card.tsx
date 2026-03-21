@@ -1,4 +1,4 @@
-import { CustomCard } from '@/components/widgets/custom-card';
+import { CustomCard } from '@/components/widgets';
 import type { ExampleItem } from '../types';
 
 interface ExampleCardProps {

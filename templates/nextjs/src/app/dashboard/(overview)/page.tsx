@@ -1,4 +1,4 @@
-import { ExampleCard, EXAMPLE_ITEMS } from '@/features/example';
+import { ExampleList } from '@/features/example';
 
 export default function DashboardOverviewPage() {
   return (
@@ -8,10 +8,8 @@ export default function DashboardOverviewPage() {
         This is a placeholder dashboard page. Replace with your content.
       </p>
 
-      <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {EXAMPLE_ITEMS.map((item) => (
-          <ExampleCard key={item.id} item={item} />
-        ))}
+      <div className="mt-8">
+        <ExampleList />
       </div>
     </div>
   );

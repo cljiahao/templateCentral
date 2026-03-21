@@ -1,4 +1,4 @@
-import { LinkList, type LinkItem } from '@/components/widgets/link-list';
+import { LinkList, type LinkItem } from '@/components/widgets';
 
 interface SiteFooterProps {
   creditText?: string;

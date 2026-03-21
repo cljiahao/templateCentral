@@ -52,11 +52,6 @@ export function createAxiosClient(options: AxiosClientOptions): AxiosInstance {
         }
       }
 
-      if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('authToken');
-        if (token) config.headers.Authorization = `Bearer ${token}`;
-      }
-
       if (enableLogging) {
         console.log(
           `[Request] ${config.method?.toUpperCase()} ${config.url}`,
@@ -107,10 +102,6 @@ export function createAxiosClient(options: AxiosClientOptions): AxiosInstance {
           url: error.config?.url,
           message: error.message,
         });
-      }
-
-      if (statusCode === 401 && typeof window !== 'undefined') {
-        localStorage.removeItem('authToken');
       }
 
       throw new APIError({ statusCode, data });

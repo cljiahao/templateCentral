@@ -4,11 +4,11 @@ import { Button } from '@/components/ui/button';
 import { AlertCircle } from 'lucide-react';
 
 export default function DashboardError({
+  error,
   reset,
-  refetch,
 }: {
-  reset?: () => void;
-  refetch?: () => void;
+  error: Error & { digest?: string };
+  reset: () => void;
 }) {
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
@@ -18,7 +18,7 @@ export default function DashboardError({
         An unexpected error occurred while loading the dashboard. Please try
         again.
       </p>
-      <Button onClick={refetch ?? reset} variant="outline">
+      <Button onClick={reset} variant="outline">
         Try again
       </Button>
     </div>

@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { PAGE_ROUTES } from '@/lib/constants/routes';
-import { logError } from '@/lib/errors/error-log-handler';
+import { logError } from '@/lib/errors';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';

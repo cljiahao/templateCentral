@@ -1,19 +1,15 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { LinkList, type LinkItem } from '@/components/widgets/link-list';
+import { LinkList, type LinkItem } from '@/components/widgets';
 import { cn } from '@/lib/utils';
 import { PAGE_ROUTES } from '@/lib/constants/routes';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 
-const defaultNavLinks: LinkItem[] = [
-  { label: 'Features', href: PAGE_ROUTES.FEATURES },
-  { label: 'FAQs', href: PAGE_ROUTES.FAQ_SECTION },
-];
+const defaultNavLinks: LinkItem[] = [];
 
 export function Navbar() {
-  const router = useRouter();
   const pathname = usePathname();
   const rootPath = `/${pathname.split('/')[1]}`;
   const isDashboard = rootPath === PAGE_ROUTES.DASHBOARD;
@@ -40,16 +36,15 @@ export function Navbar() {
           <span>Central</span>
         </Link>
 
-        <div className="flex gap-4">
-          <LinkList
-            links={defaultNavLinks}
-            className="hover:text-primary transition-colors"
-          />
-          <Button
-            onClick={() => router.push(PAGE_ROUTES.DASHBOARD)}
-            className="bg-primary hover:bg-primary-hover h-12 rounded-lg px-6 py-3 font-bold text-white"
-          >
-            Dashboard
+        <div className="flex items-center gap-4">
+          {defaultNavLinks.length > 0 && (
+            <LinkList
+              links={defaultNavLinks}
+              className="hover:text-primary transition-colors"
+            />
+          )}
+          <Button asChild className="bg-primary hover:bg-primary-hover h-12 rounded-lg px-6 py-3 font-bold text-white">
+            <Link href={PAGE_ROUTES.DASHBOARD}>Dashboard</Link>
           </Button>
         </div>
       </div>

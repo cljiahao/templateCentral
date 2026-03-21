@@ -22,7 +22,7 @@ A production-ready Next.js application template with shadcn/ui, Tailwind CSS, an
 
 ```
 ├── __tests__/api/               # API route handler tests (Vitest)
-├── src/proxy.ts                 # Thin proxy (rewrites, redirects, headers — customize for auth)
+├── src/proxy.ts                 # Next.js 16 proxy (replaces middleware — route protection, redirects)
 ├── .trivyignore.yaml            # Trivy CVE suppressions for Node.js base image
 ├── Dockerfile                   # Multi-stage build (base → prisma → deps → builder → dev/prod)
 ├── docker-entrypoint.sh         # Package manager auto-detection (pnpm/yarn/npm)
@@ -30,12 +30,12 @@ A production-ready Next.js application template with shadcn/ui, Tailwind CSS, an
 └── src/
     ├── app/                          # Next.js App Router
     │   ├── globals.css               # Tailwind config, CSS variables, utility classes
-    │   ├── layout.tsx                # Root layout (Lato + Geist Mono, ThemeProvider, Toaster)
+    │   ├── layout.tsx                # Root layout (Lato + Geist Mono, ThemeProvider, Providers, Toaster)
     │   ├── (public)/                 # Public route group
-    │   │   ├── layout.tsx            # Navbar + Footer + Providers
+    │   │   ├── layout.tsx            # Navbar + Footer shell
     │   │   └── page.tsx              # Home page
     │   ├── dashboard/                # Dashboard route group
-    │   │   ├── layout.tsx            # Navbar + Footer + Providers
+    │   │   ├── layout.tsx            # Navbar + Footer shell
     │   │   ├── (overview)/           # Overview sub-group
     │   │   │   ├── page.tsx          # Dashboard page
     │   │   │   ├── loading.tsx       # Loading skeleton
@@ -45,12 +45,15 @@ A production-ready Next.js application template with shadcn/ui, Tailwind CSS, an
     │   │       ├── loading.tsx       # Loading skeleton
     │   │       └── not-found.tsx     # 404 page
     │   └── api/
-    │       └── route.ts              # Health check endpoint
+    │       ├── route.ts              # Health check endpoint
+    │       └── auth/[...nextauth]/   # NextAuth API handler
+    ├── auth.ts                       # NextAuth config (providers, JWT callbacks)
     ├── components/                   # Shared components
     │   ├── layout/                   # Navbar, SiteFooter, Providers, ThemeProvider
     │   ├── ui/                       # shadcn/ui components (20+ components)
     │   └── widgets/                  # Reusable widgets (see below)
     ├── features/                     # Domain-specific feature modules
+    │   ├── auth/                     # Auth feature (LoginCard, LoginButton, SignOutButton)
     │   └── example/                  # Example feature (reference implementation)
     │       ├── api/                  # Client-side data access (fetch calls to /api/*)
     │       ├── components/           # Feature-specific UI
@@ -66,7 +69,6 @@ A production-ready Next.js application template with shadcn/ui, Tailwind CSS, an
     │   ├── schemas/                  # Zod schemas for external responses
     │   └── services/                 # Business logic wrapping clients
     └── lib/                          # Shared utilities
-        ├── index.ts                  # Barrel export
         ├── utils/                    # cn(), mergeHandlers()
         ├── constants/                # Routes, env, avatar colors
         └── errors/                   # Error logging and API error handler
@@ -110,7 +112,7 @@ The Dockerfile supports optional Prisma — if a `prisma/` directory exists, it'
 ### Layout
 - `Navbar` — Responsive navigation with brand text and link list
 - `SiteFooter` — Footer with credit text and links
-- `Providers` — React Query provider wrapper
+- `Providers` — SessionProvider + React Query provider wrapper
 - `ThemeProvider` — next-themes wrapper
 
 ### UI (shadcn/ui)
@@ -122,7 +124,10 @@ Accordion, Avatar, Button, ButtonGroup, Card, Checkbox, Dialog, DropdownMenu, Fi
 - `CustomCard` — Card with configurable header/description
 - `CustomDialog` — Dialog with trigger/title/description
 - `CustomFormField` — React Hook Form field with validation
+- `FloatingShape` — Animated floating image with Framer Motion
 - `LinkList` — Reusable link list component
+- `MediaCard` — Card with configurable media position (top/bottom/left/right)
+- `Pill` — Gradient pill badge (outline or solid variant)
 - `ThemeToggleButton` — Animated dark/light toggle
 
 ## Quality Scripts
@@ -140,7 +145,7 @@ pnpm check           # Run all checks
 
 - `globals.css` — Theme colors (neutral palette by default), CSS custom properties
 - `layout.tsx` — Fonts, metadata, default theme
-- `src/proxy.ts` — Thin proxy for rewrites, redirects, and headers (add auth provider)
+- `src/proxy.ts` — Next.js 16 proxy for route protection (replaces middleware from Next.js 15)
 - `lib/constants/routes.ts` — Page and API routes
 - `components.json` — shadcn/ui style and color preferences
 - `Dockerfile` — Port, Node version, timezone

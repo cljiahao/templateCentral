@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ExampleService } from '../api/example-service';
+import { ExampleService } from '../api';
 
 export const useExampleItems = () => {
   return useQuery({

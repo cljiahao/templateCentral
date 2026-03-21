@@ -1,4 +1,4 @@
-import { ThemeProvider } from '@/components/layout/theme-provider';
+import { Providers, ThemeProvider } from '@/components/layout';
 import type { Metadata } from 'next';
 import { Geist_Mono, Lato } from 'next/font/google';
 import { Toaster } from 'sonner';
@@ -35,7 +35,9 @@ export default function RootLayout({
           defaultTheme="light"
           disableTransitionOnChange
         >
-          {children}
+          <Providers>
+            {children}
+          </Providers>
           <Toaster richColors />
         </ThemeProvider>
       </body>
