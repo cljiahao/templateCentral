@@ -1,0 +1,232 @@
+---
+name: add-auth
+description: Use when the user wants to add authentication, JWT tokens, password hashing, or user login/registration to a FastAPI project.
+---
+
+# Add Auth to FastAPI
+
+Add JWT-based authentication to a FastAPI project scaffolded from templateCentral.
+
+## Dependencies
+
+Add to `requirements.txt`:
+- `python-jose[cryptography]` — JWT encoding/decoding
+- `passlib[bcrypt]` — Password hashing
+
+## Steps
+
+### 1. Add Auth Schemas
+
+Create request/response schemas for auth endpoints.
+
+**`src/api/schemas/request/auth.py`**:
+```python
+from pydantic import Field
+
+from api.schemas.base import BaseRequestSchema
+
+
+class RegisterRequest(BaseRequestSchema):
+    """Registration request."""
+
+    email: str = Field(description="User email address.")
+    password: str = Field(min_length=8, description="User password.")
+    name: str = Field(description="User display name.")
+
+
+class LoginRequest(BaseRequestSchema):
+    """Login request."""
+
+    email: str = Field(description="User email address.")
+    password: str = Field(description="User password.")
+```
+
+**`src/api/schemas/response/auth.py`**:
+```python
+from pydantic import Field
+
+from api.schemas.base import BaseResponseSchema
+
+
+class TokenResponse(BaseResponseSchema):
+    """JWT token response."""
+
+    access_token: str = Field(description="JWT access token.")
+    token_type: str = Field(default="bearer", description="Token type.")
+
+
+class UserResponse(BaseResponseSchema):
+    """Authenticated user info."""
+
+    id: str = Field(description="User ID.")
+    email: str = Field(description="User email.")
+    name: str = Field(description="User display name.")
+```
+
+### 2. Create Security Module
+
+**`src/core/security.py`** — JWT token creation/verification and password hashing:
+
+```python
+from datetime import datetime, timedelta, timezone
+
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+
+from core.config import settings
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+ALGORITHM = "HS256"
+
+
+def hash_password(password: str) -> str:
+    """Hash a plaintext password."""
+    return pwd_context.hash(password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a password against its hash."""
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+def create_access_token(subject: str, expires_delta: timedelta | None = None) -> str:
+    """Create a JWT access token."""
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=30))
+    to_encode = {"sub": subject, "exp": expire}
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_access_token(token: str) -> str | None:
+    """Decode and validate a JWT token. Returns the subject or None."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        return payload.get("sub")
+    except JWTError:
+        return None
+```
+
+### 3. Create Auth Dependency
+
+**`src/api/dependencies/auth.py`** — `get_current_user` dependency for protecting routes:
+
+```python
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+from core.security import decode_access_token
+
+bearer_scheme = HTTPBearer()
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+) -> str:
+    """Extract and validate the current user from the JWT token."""
+    user_id = decode_access_token(credentials.credentials)
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token.",
+        )
+    return user_id
+```
+
+### 4. Create Auth Service
+
+**`src/api/services/auth_service.py`** — orchestrates registration and login:
+
+```python
+from fastapi import HTTPException, status
+
+from core.security import create_access_token, hash_password, verify_password
+
+
+def register_user(email: str, password: str, name: str) -> dict:
+    """Register a new user. Replace with real DB logic."""
+    hashed = hash_password(password)
+    # TODO: persist user to database
+    user_id = "generated-id"
+    return {"id": user_id, "email": email, "name": name, "hashed_password": hashed}
+
+
+def login_user(email: str, password: str) -> str:
+    """Authenticate user and return JWT. Replace with real DB lookup."""
+    # TODO: look up user by email from database
+    # Example: user = get_user_by_email(email)
+    # if not user or not verify_password(password, user.hashed_password):
+    #     raise HTTPException(status_code=401, detail="Invalid credentials.")
+    # return create_access_token(subject=user.id)
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Replace with real user lookup.",
+    )
+```
+
+### 5. Create Auth Router
+
+**`src/api/routers/auth.py`**:
+
+```python
+from fastapi import APIRouter, Depends
+
+from api.schemas.request.auth import LoginRequest, RegisterRequest
+from api.schemas.response.auth import TokenResponse, UserResponse
+from api.services.auth_service import login_user, register_user
+from api.tags import APITags
+
+router = APIRouter(prefix="/auth", tags=[APITags.AUTH])
+
+
+@router.post("/register", response_model=UserResponse)
+async def register(body: RegisterRequest) -> UserResponse:
+    """Register a new user account."""
+    user = register_user(email=body.email, password=body.password, name=body.name)
+    return UserResponse(id=user["id"], email=user["email"], name=user["name"])
+
+
+@router.post("/login", response_model=TokenResponse)
+async def login(body: LoginRequest) -> TokenResponse:
+    """Authenticate and receive a JWT token."""
+    token = login_user(email=body.email, password=body.password)
+    return TokenResponse(access_token=token)
+```
+
+### 6. Register the Router
+
+Add the auth router to `src/api/routes.py`:
+
+```python
+from api.routers import auth
+
+router.include_router(auth.router)
+```
+
+### 7. Add Environment Variables
+
+Add to `.env` / config:
+- `SECRET_KEY` — Random string for JWT signing (generate with `openssl rand -hex 32`)
+- `ACCESS_TOKEN_EXPIRE_MINUTES` — Token expiry (default: 30)
+
+### 8. Protect Routes
+
+Use the `get_current_user` dependency on any endpoint that requires auth:
+
+```python
+from api.dependencies.auth import get_current_user
+
+@router.get("/me", response_model=UserResponse)
+async def get_me(user_id: str = Depends(get_current_user)) -> UserResponse:
+    """Get the current authenticated user."""
+    # TODO: look up user by user_id
+    ...
+```
+
+## Rules
+
+- **SECRET_KEY must be kept secret** — never commit to version control. Add to `.env` and `.gitignore`.
+- Follow the existing dependency flow: routers are thin, services orchestrate logic.
+- Use `HTTPBearer` scheme so Swagger UI gets the "Authorize" button.
+- Always hash passwords with `passlib` — never store plaintext.
+- `get_current_user` returns the user ID (subject). Extend it to return a full user object once you have a database.
+- Add `AUTH` to the `APITags` enum in `src/api/tags.py`.
