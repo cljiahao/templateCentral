@@ -130,6 +130,6 @@ All `code-standards/` rules apply. Key rules for components:
 
 - **Always add to barrel** `index.ts` when creating in shared folders — NEVER omit when adding to `widgets/` or `layout/`
 - Don't prematurely extract — keep inline until a second consumer needs it. NEVER extract to `widgets/` until it has a second consumer
-- NEVER use `React.memo`, `useCallback`, or `useMemo` unless profiling confirms a problem
+- NEVER use `React.memo`, `useCallback`, or `useMemo` unless profiling confirms a problem (exception: context providers — see `code-standards`)
 - NEVER manually create files in `src/components/ui/` — use the shadcn CLI (`npx shadcn@latest add`)
 - NEVER add boolean flag props to configure variants — prefer composition with children

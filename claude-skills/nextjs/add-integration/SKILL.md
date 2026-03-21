@@ -101,7 +101,7 @@ export function Github() {
 }
 ```
 
-> **Naming convention**: Factory functions use PascalCase matching the integration name: `Github()`, `DB()`, `Stripe()`, `SSM()`. This matches the appCentral pattern.
+> **Naming convention**: Factory functions use PascalCase matching the integration name: `Github()`, `DB()`, `Stripe()`, `SSM()`.
 
 > **Alternative: Axios-based client** — For server-side integrations needing mTLS, API key headers, or request/response logging, use `createAxiosClient` from `src/integrations/clients/base/axios-client.ts` instead of extending `FetchClient`.
 

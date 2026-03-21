@@ -24,7 +24,7 @@ src/features/<feature-name>/
 │   └── index.ts
 ├── hooks/                       # React hooks (queries, mutations, local state)
 │   └── index.ts
-├── schemas/                     # Zod validation schemas (create when feature uses form validation or API response parsing)
+├── schemas/                     # Zod validation schemas (see Step 4b)
 ├── constants.ts                 # Static data (arrays, config objects, options)
 ├── types.ts                     # TypeScript interfaces and types
 └── index.ts                     # Barrel export
@@ -61,18 +61,23 @@ Data access services consumed by React Query hooks on the client side:
 
 ```ts
 // api/project-service.ts
+import { APIError } from '@/integrations/error';
 import type { ProjectItem } from '../types';
 
 export const ProjectService = {
   getAll: async (): Promise<ProjectItem[]> => {
     const res = await fetch('/api/projects');
-    if (!res.ok) throw new Error('Failed to fetch projects');
+    if (!res.ok) {
+      throw new APIError({ statusCode: res.status, data: await res.json().catch(() => ({ message: 'Failed to fetch projects' })) });
+    }
     return res.json();
   },
 
   getById: async (id: string): Promise<ProjectItem> => {
     const res = await fetch(`/api/projects/${id}`);
-    if (!res.ok) throw new Error('Project not found');
+    if (!res.ok) {
+      throw new APIError({ statusCode: res.status, data: await res.json().catch(() => ({ message: 'Project not found' })) });
+    }
     return res.json();
   },
 
@@ -82,13 +87,37 @@ export const ProjectService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Failed to create project');
+    if (!res.ok) {
+      throw new APIError({ statusCode: res.status, data: await res.json().catch(() => ({ message: 'Failed to create project' })) });
+    }
     return res.json();
   },
 };
 ```
 
 Export from barrel: `api/index.ts`
+
+### 4b. Create Schemas (in `schemas/`, Optional)
+
+Create Zod schemas when the feature has form validation or needs to parse external API responses. Skip this step if the feature only consumes typed data from its own service.
+
+```ts
+// schemas/project-schemas.ts
+import { z } from 'zod';
+
+export const createProjectSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(100),
+  description: z.string().max(500).optional(),
+  status: z.enum(['active', 'archived']),
+});
+
+export type CreateProjectInput = z.infer<typeof createProjectSchema>;
+```
+
+Use these schemas in:
+- **React Hook Form** — pass to `zodResolver(createProjectSchema)` for client-side form validation
+- **API route handlers** — use `safeParse()` to validate request bodies (see `add-api-route` skill)
+- **Service layer** — validate external API responses before returning typed data
 
 ### 5. Create Components (in `components/`)
 
@@ -128,7 +157,7 @@ import { ProjectService } from '../api';
 export const useProjects = () => {
   return useQuery({
     queryKey: ['projects'],
-    queryFn: ProjectService.getAll,
+    queryFn: () => ProjectService.getAll(),
   });
 };
 ```
@@ -141,10 +170,11 @@ Export from barrel: `hooks/index.ts`
 // index.ts
 export * from './components';
 export * from './hooks';
+export * from './constants';
 export type { ProjectItem } from './types';
 ```
 
-Export types that consumers need (e.g., for typed props or state).
+Export constants that consumers need (e.g., static data for rendering). Export types for typed props or state.
 
 If the feature has client-side data access services (hooks that call `/api/*`), also export the API layer:
 

@@ -102,15 +102,18 @@ Create `AGENTS.md` in the project root. This gives any AI agent (Cursor, Codex, 
 # <Project Name>
 
 ## Identity
-- **Stack**: Vite 8, React 19, TypeScript, Tailwind CSS 4, React Router 7, TanStack React Query 5
+- **Stack**: Vite 8, React 19, TypeScript, shadcn/ui, Tailwind CSS 4, React Router 7, TanStack React Query 5, React Hook Form + Zod, AuthProvider
 - **Scaffolded from**: templateCentral/templates/vite-react
 - **Created**: <date>
 - **Type**: Client-side SPA (no SSR, no API route handlers)
 
 ## Architecture Decisions
 - Routes defined in `src/router.tsx`, not by filesystem convention
+- Auth via `AuthProvider` context + `ProtectedRoute` guard; dev bypass when `ENV.IS_DEV`
 - Feature modules under `src/features/<name>/`
 - Barrel exports (`index.ts`) for all shared folders
+- shadcn/ui primitives in `src/components/ui/` (managed by CLI, `components.json` with `rsc: false`)
+- Reusable composed widgets in `src/components/widgets/`
 - Env vars via `import.meta.env.VITE_*`, centralized in `src/lib/constants/env.ts`
 
 ## Key Conventions
@@ -149,8 +152,12 @@ Skip for simple changes (single-file edits, scaffolding, quick fixes).
 | Build | Vite 8 |
 | UI | React 19, TypeScript 5.9 |
 | Styling | Tailwind CSS 4, tw-animate-css |
+| UI | shadcn/ui (new-york), Radix UI, Lucide icons |
+| Forms | React Hook Form + Zod |
+| Animation | Framer Motion |
 | Routing | React Router 7 |
 | State | TanStack React Query 5 |
+| Auth | AuthProvider context with dev bypass |
 | Toasts | Sonner |
 | Testing | Vitest, Testing Library |
 | Linting | ESLint 9, Prettier (organize-imports + tailwind) |
@@ -167,6 +174,7 @@ Skip for simple changes (single-file edits, scaffolding, quick fixes).
 | `src/components/layout/navbar.tsx` | Brand text, navigation links |
 | `src/components/layout/site-footer.tsx` | Credit text |
 | `src/lib/constants/routes.ts` | Page and API route definitions |
+| `components.json` | shadcn/ui style and color preferences |
 | `.env.example` / `.env` | Environment variables |
 
 ## Architecture Patterns
@@ -177,6 +185,7 @@ Skip for simple changes (single-file edits, scaffolding, quick fixes).
 - **Layout composition**: `RootLayout` wraps `Navbar` + `<Outlet>` + `SiteFooter`
 - **Lib structure**: `utils/`, `constants/`, `errors/` under `src/lib/`
 - **Widgets**: Reusable composed components in `src/components/widgets/`
+- **UI primitives**: shadcn/ui components in `src/components/ui/` (managed via `npx shadcn@latest add`, `components.json` with `rsc: false`)
 
 ## Rules
 

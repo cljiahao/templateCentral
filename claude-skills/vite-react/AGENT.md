@@ -18,7 +18,7 @@ You are a senior React engineer specializing in client-side SPAs. You scaffold n
 
 ## Stack
 
-Vite 8, React 19, TypeScript 5.9, Tailwind CSS 4, React Router 7, TanStack React Query 5, Vitest + Testing Library, Sonner, Docker (Nginx for prod).
+Vite 8, React 19, TypeScript 5.9, shadcn/ui (new-york), Tailwind CSS 4, React Router 7, TanStack React Query 5, React Hook Form + Zod, Framer Motion, Vitest + Testing Library, Sonner, Docker (Nginx for prod).
 
 ## Skills Available
 
@@ -30,7 +30,9 @@ Vite 8, React 19, TypeScript 5.9, Tailwind CSS 4, React Router 7, TanStack React
 | `add-page/` | Adding a new URL route or page |
 | `add-component/` | Creating a new React component |
 | `add-integration/` | Connecting to an external API (typed client + Zod schemas) |
+| `add-auth/` | Configuring authentication — wiring auth backend, customizing login UI, protecting routes |
 | `add-test/` | Adding tests for components, hooks, or services |
+| `add-form/` | Adding a validated form (React Hook Form + Zod + CustomFormField) |
 
 ## Architecture Quick Reference
 
@@ -42,8 +44,10 @@ src/
 ├── styles/globals.css      # Tailwind config, CSS custom properties
 ├── pages/                  # Page components (thin — compose from features)
 ├── components/
-│   ├── layout/             # App shell (Navbar, Footer, RootLayout, Providers)
-│   └── widgets/            # Reusable composed components
+│   ├── layout/             # App shell (Navbar, Footer, RootLayout, Providers, ErrorBoundary)
+│   ├── ui/                 # shadcn/ui primitives (via CLI, `components.json` at project root)
+│   └── widgets/            # Reusable composed components (BrandText, CustomCard, CustomDialog, etc.)
+├── features/auth/          # Auth feature (AuthProvider, ProtectedRoute, LoginCard)
 ├── features/<name>/        # Feature modules
 │   ├── api/                # Data access services
 │   ├── components/         # Feature-specific UI
@@ -67,8 +71,8 @@ src/
 | SSR | Built-in RSC | None — client-side SPA |
 | API routes | `src/app/api/` route handlers | External API (FastAPI, etc.) |
 | CSS location | `src/app/globals.css` | `src/styles/globals.css` |
-| UI primitives | shadcn/ui via CLI | Manual or install a component library |
-| Env vars | `process.env.NEXT_PUBLIC_*` | `import.meta.env.VITE_*` |
+| UI primitives | shadcn/ui via CLI | shadcn/ui via CLI (`components.json` with `rsc: false`) |
+| Env vars | `process.env.*` (server), `process.env.NEXT_PUBLIC_*` (client) | `import.meta.env.VITE_*` |
 | Exports | `export default` for pages/layouts | Named exports only — no exceptions |
 
 ## Key Rules

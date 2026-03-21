@@ -58,6 +58,7 @@ const useUploadForm = () => {
 |----------|----------|
 | Used by one feature | `src/features/<name>/components/` |
 | Used by 2+ features | `src/components/widgets/` |
+| Low-level primitive | `src/components/ui/` (use `npx shadcn@latest add`) |
 | App shell (nav, footer, layout) | `src/components/layout/` |
 
 ## Performance
@@ -86,6 +87,15 @@ export const ENV = {
 } as const;
 ```
 
+## Utility Classes
+
+The template provides these shared utilities:
+
+- **`cn()`** — Class merging utility (`clsx` + `tailwind-merge`) in `src/lib/utils/index.ts`. Use for conditional class composition
+- **`flex-center`** — Custom CSS utility (defined in `globals.css`) for `display: flex; align-items: center; justify-content: center`
+- **`flex-between`** — Custom CSS utility for `display: flex; align-items: center; justify-content: space-between`
+- **`max-w-site`** — Custom max-width utility for consistent page-width containers
+
 ## Barrel Exports
 
 - Each feature and shared folder has an `index.ts` re-exporting the public API
@@ -110,6 +120,6 @@ export const ENV = {
 - **`import.meta.env.VITE_*`** for env vars (NEVER `process.env`), centralized in `src/lib/constants/env.ts`
 - **Thin components** — delegate logic to hooks and services; NEVER put business logic in components
 - **Client-only SPA** — NEVER add server-side code (SSR, API route handlers, RSC)
-- NEVER use `React.memo`, `useCallback`, or `useMemo` without profiling evidence
+- NEVER use `React.memo`, `useCallback`, or `useMemo` without profiling evidence. **Exception**: `useMemo`/`useCallback` are appropriate in React context providers to stabilize the context value and prevent unnecessary re-renders of all consumers
 - NEVER use `any` — use `unknown` and narrow with type guards
 - NEVER use inline styles — use Tailwind classes

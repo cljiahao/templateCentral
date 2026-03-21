@@ -20,6 +20,7 @@ First, determine where the component belongs:
 |----------|----------|---------|
 | Used by one feature only | `src/features/<name>/components/` | `ProjectCard` in `features/project` |
 | Used by 2+ features | `src/components/widgets/` | `StatusBadge` used by project + dashboard |
+| Low-level primitive | `src/components/ui/` (use shadcn CLI) | `Button`, `Input`, `Dialog` |
 | App shell | `src/components/layout/` | `Navbar`, `SiteFooter` |
 
 ## Steps
@@ -60,6 +61,16 @@ Add the export to the folder's `index.ts`:
 // src/components/widgets/index.ts
 export { StatusBadge } from './status-badge';
 ```
+
+### 3. Adding a shadcn/ui Component
+
+For low-level UI primitives, use the shadcn CLI:
+
+```bash
+npx shadcn@latest add <component-name>
+```
+
+This installs into `src/components/ui/`. The project has a `components.json` with `rsc: false` for Vite compatibility. Do not manually create UI primitives.
 
 ## Component Patterns
 
@@ -105,7 +116,7 @@ export const STATUS_OPTIONS = [
 import { STATUS_OPTIONS } from '../constants';
 ```
 
-### 3. Validate
+### 4. Validate
 
 ```bash
 pnpm build && pnpm test
@@ -119,6 +130,7 @@ All `code-standards/` rules apply. Key rules for components:
 
 - Always add to barrel `index.ts` when creating in shared folders — NEVER omit the barrel export
 - Don't prematurely extract — keep inline until a second consumer needs it; NEVER extract into `widgets/` until it has a second consumer
-- Don't use React.memo/useCallback/useMemo unless profiling confirms a problem
+- Don't use React.memo/useCallback/useMemo unless profiling confirms a problem (exception: context providers — see `code-standards`)
+- NEVER manually create files in `src/components/ui/` — use the shadcn CLI (`npx shadcn@latest add`)
 - NEVER add boolean flag props to configure variants — prefer composition with children
 - NEVER put data-fetching logic in components — use hooks from the feature's `hooks/` folder

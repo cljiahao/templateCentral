@@ -94,12 +94,14 @@ Create `AGENTS.md` in the project root. This gives any AI agent (Cursor, Codex, 
 # <Project Name>
 
 ## Identity
-- **Stack**: Next.js 16, React 19, TypeScript, shadcn/ui, Tailwind CSS 4, TanStack React Query
+- **Stack**: Next.js 16, React 19, TypeScript, shadcn/ui, Tailwind CSS 4, TanStack React Query, NextAuth
 - **Scaffolded from**: templateCentral/templates/nextjs
 - **Created**: <date>
 
 ## Architecture Decisions
-- Route groups: `(public)/` for public pages, `dashboard/` for authenticated
+- Auth via NextAuth (Auth.js) with `proxy.ts` route protection (Next.js 16 proxy, replaces middleware); dev bypass when `isDev`
+- Providers (SessionProvider, QueryClientProvider) in root `layout.tsx` — shared across all route groups
+- Route groups: `(public)/` for public pages, `dashboard/` for authenticated — each has its own Navbar + Footer shell
 - Feature modules under `src/features/<name>/`
 - Barrel exports (`index.ts`) for all shared folders
 - shadcn/ui primitives in `src/components/ui/` (managed by CLI)
@@ -146,6 +148,7 @@ Skip for simple changes (single-file edits, scaffolding, quick fixes).
 | Animations | Framer Motion |
 | Theme | next-themes (dark/light) |
 | Toasts | Sonner |
+| Auth | NextAuth (Auth.js) with dev bypass |
 | HTTP | Axios |
 | Docker | Multi-stage (dev + prod standalone) |
 | Testing | Vitest (API route tests only) |
@@ -163,7 +166,8 @@ Skip for simple changes (single-file edits, scaffolding, quick fixes).
 | `src/components/layout/site-footer.tsx` | Credit text, footer links |
 | `src/lib/constants/routes.ts` | Page and API route definitions |
 | `components.json` | shadcn/ui style and color preferences |
-| `src/proxy.ts` | Auth provider, public paths, redirect rules |
+| `src/auth.ts` | Auth providers (add SSO providers here) |
+| `src/proxy.ts` | Public paths, redirect rules |
 | `Dockerfile` | Port, Node version, timezone |
 | `.env.example` / `.env.local` | Environment variables |
 
@@ -174,7 +178,7 @@ This template follows these conventions:
 - **Route groups**: `(public)` for public pages, `dashboard` for authenticated
 - **Feature folders**: Add `src/features/<name>/` for domain-specific components
 - **Barrel exports**: `index.ts` files for clean imports (`@/lib/utils`, `@/features/example`, `@/components/layout`)
-- **Layout composition**: Each route group has its own layout with Navbar + Providers + Footer
+- **Layout composition**: Providers (SessionProvider + QueryClient) in root layout; each route group has its own layout with Navbar + Footer
 - **Lib structure**: `utils/`, `constants/`, `errors/` under `src/lib/`
 - **Widgets**: Reusable composed components in `src/components/widgets/`
 

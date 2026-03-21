@@ -155,7 +155,7 @@ Confirm the build succeeds with no type errors. Verify the route responds correc
 - Always use `handleApiError()` for error responses — NEVER return raw error objects or stack traces
 - Use `NextResponse.json()` for all responses
 - Use dynamic segments `[id]` for resource IDs
-- Always authenticate protected endpoints (add auth check at top of handler)
+- API routes are protected by `src/proxy.ts` by default — unauthenticated requests to non-public paths receive a 401 response automatically. Add route-level auth checks only when you need role-based or resource-level authorization beyond authentication
 - NEVER use `request.json()` without validation — parse with Zod and return 400 on failure
 - NEVER expose internal error details in responses — rely on `handleApiError()` for generic messages
 - NEVER skip the routes constant — always add new API routes to `src/lib/constants/routes.ts`

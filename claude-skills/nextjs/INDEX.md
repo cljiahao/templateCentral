@@ -11,4 +11,6 @@ All skills for Next.js projects scaffolded from templateCentral.
 | `add-api-route/` | Use when the user needs a new server-side API endpoint under src/app/api/, wants to add GET/POST/PUT/DELETE handlers, or needs a dynamic [id] route. |
 | `add-component/` | Use when creating a new React component and unsure whether it belongs in features/, widgets/, layout/, or ui/, or when adding a shared component with barrel exports. |
 | `add-integration/` | Use when connecting to an external API (e.g., GitHub, Stripe, OpenAI) and need a client, Zod response schemas, service layer, and factory pattern. |
+| `add-auth/` | Use when the user wants to add authentication, configure an SSO provider (Microsoft Entra ID, Google, GitHub, etc.), customize the login flow, or protect routes. |
 | `add-test/` | Use when adding tests for Next.js API route handlers, test coverage is missing for endpoints, or the user asks to write unit tests for backend API logic. |
+| `add-form/` | Use when adding a form with validation to a Next.js project — covers React Hook Form setup, Zod schema definition, CustomFormField usage, and toast notifications. |

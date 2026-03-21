@@ -122,6 +122,8 @@ Some skills are cross-stack and can be used by any subagent. These live in `clau
 | Skill | When to use |
 |-------|-------------|
 | `shared/task-management/` | Complex, multi-step features (3+ files, architectural decisions). Opt-in via the project's `AGENTS.md`. |
+| `shared/full-stack-pairing/` | Connecting a frontend to a backend — proxy config, CORS, env vars, cookie forwarding. |
+| `shared/remove-example/` | Removing the example/demo code from a scaffolded project to start clean. |
 
 Subagents should check `claude-skills/shared/INDEX.md` when a task doesn't fit their stack-specific skills.
 

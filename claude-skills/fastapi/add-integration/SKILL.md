@@ -1,0 +1,162 @@
+---
+name: add-integration
+description: Use when connecting to an external API (e.g., GitHub, Stripe, OpenAI) from a FastAPI project and need an async HTTP client, Pydantic response schemas, and service layer.
+---
+
+# Add an External Integration to FastAPI
+
+Create a new third-party API integration in a FastAPI project scaffolded from templateCentral.
+
+## Inputs
+
+- **Service name** — The external service (e.g., `github`, `stripe`, `openai`)
+- **Base URL** — The API base URL
+
+## Architecture
+
+```
+config → client → schemas → service → dependency injection → router
+```
+
+- **client** — Async HTTP client using `httpx`
+- **schemas** — Pydantic models for validating external API responses
+- **service** — Business logic wrapping the client
+- **dependency** — FastAPI dependency for injecting the service
+
+## Dependencies
+
+Add to `requirements.txt`:
+- `httpx` — Async HTTP client
+
+## Steps
+
+### 1. Create the Client
+
+**`src/integrations/<name>_client.py`**:
+
+```python
+import httpx
+
+
+class GithubClient:
+    """HTTP client for the GitHub API."""
+
+    def __init__(self, base_url: str, token: str) -> None:
+        self._client = httpx.AsyncClient(
+            base_url=base_url,
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=30.0,
+        )
+
+    async def get_repos(self) -> list[dict]:
+        """Fetch the authenticated user's repositories."""
+        response = await self._client.get("/user/repos")
+        response.raise_for_status()
+        return response.json()
+
+    async def get_repo(self, owner: str, repo: str) -> dict:
+        """Fetch a specific repository."""
+        response = await self._client.get(f"/repos/{owner}/{repo}")
+        response.raise_for_status()
+        return response.json()
+
+    async def close(self) -> None:
+        await self._client.aclose()
+```
+
+### 2. Define Response Schemas
+
+**`src/integrations/<name>_schemas.py`**:
+
+```python
+from pydantic import Field
+
+from api.schemas.base import BaseResponseSchema
+
+
+class GithubRepo(BaseResponseSchema):
+    """GitHub repository response."""
+
+    id: int = Field(description="Repository ID.")
+    full_name: str = Field(description="Full repository name (owner/repo).")
+    description: str | None = Field(default=None, description="Repository description.")
+    html_url: str = Field(description="URL to the repository.")
+    stargazers_count: int = Field(default=0, description="Star count.")
+```
+
+### 3. Create the Service
+
+**`src/integrations/<name>_service.py`**:
+
+```python
+from integrations.github_client import GithubClient
+from integrations.github_schemas import GithubRepo
+
+
+class GithubService:
+    """Business logic for GitHub integration."""
+
+    def __init__(self, client: GithubClient) -> None:
+        self._client = client
+
+    async def list_repos(self) -> list[GithubRepo]:
+        """Fetch and validate all repos."""
+        raw = await self._client.get_repos()
+        return [GithubRepo.model_validate(r) for r in raw]
+
+    async def get_repo(self, owner: str, repo: str) -> GithubRepo:
+        """Fetch and validate a single repo."""
+        raw = await self._client.get_repo(owner, repo)
+        return GithubRepo.model_validate(raw)
+```
+
+### 4. Create a Dependency
+
+**`src/api/dependencies/<name>.py`**:
+
+```python
+from collections.abc import AsyncGenerator
+
+from fastapi import Depends
+
+from core.config import settings
+from integrations.github_client import GithubClient
+from integrations.github_service import GithubService
+
+
+async def get_github_service() -> AsyncGenerator[GithubService, None]:
+    """Provide a GithubService instance with managed client lifecycle."""
+    client = GithubClient(base_url="https://api.github.com", token=settings.GITHUB_TOKEN)
+    try:
+        yield GithubService(client)
+    finally:
+        await client.close()
+```
+
+### 5. Wire Into Router
+
+```python
+from fastapi import APIRouter, Depends
+
+from api.dependencies.github import get_github_service
+from integrations.github_schemas import GithubRepo
+from integrations.github_service import GithubService
+
+router = APIRouter(prefix="/github", tags=["GitHub"])
+
+
+@router.get("/repos", response_model=list[GithubRepo])
+async def list_repos(service: GithubService = Depends(get_github_service)):
+    """List authenticated user's GitHub repos."""
+    return await service.list_repos()
+```
+
+## Rules
+
+- Use `httpx.AsyncClient` for async HTTP — not `requests`.
+- Validate all external responses with Pydantic schemas before returning to callers.
+- Client handles HTTP only — no business logic. Service handles business logic.
+- Use FastAPI dependencies for lifecycle management (create → yield → close).
+- Keep API tokens in environment variables / config — never hardcode.
+- Add `response_model` to all route decorators.
+- Place integration files in `src/integrations/` — not in `api/` or `logic/`.

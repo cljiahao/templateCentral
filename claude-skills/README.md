@@ -8,7 +8,7 @@ Skills are organized by stack. Each stack folder has an `INDEX.md` listing all a
 
 ```
 claude-skills/
-├── nextjs/                      # Next.js skills (8 skills)
+├── nextjs/                      # Next.js skills (10 skills)
 │   ├── AGENT.md                 #   Subagent definition
 │   ├── INDEX.md                 #   Skill index
 │   ├── scaffold/SKILL.md
@@ -18,15 +18,20 @@ claude-skills/
 │   ├── add-api-route/SKILL.md
 │   ├── add-component/SKILL.md
 │   ├── add-integration/SKILL.md
-│   └── add-test/SKILL.md
-├── fastapi/                     # FastAPI skills (4 skills)
+│   ├── add-auth/SKILL.md
+│   ├── add-test/SKILL.md
+│   └── add-form/SKILL.md
+├── fastapi/                     # FastAPI skills (7 skills)
 │   ├── AGENT.md
 │   ├── INDEX.md
 │   ├── scaffold/SKILL.md
 │   ├── code-standards/SKILL.md
 │   ├── add-endpoint/SKILL.md
-│   └── add-test/SKILL.md
-├── vite-react/                  # Vite + React skills (6 skills)
+│   ├── add-test/SKILL.md
+│   ├── add-auth/SKILL.md
+│   ├── add-database/SKILL.md
+│   └── add-integration/SKILL.md
+├── vite-react/                  # Vite + React skills (9 skills)
 │   ├── AGENT.md
 │   ├── INDEX.md
 │   ├── scaffold/SKILL.md
@@ -34,17 +39,25 @@ claude-skills/
 │   ├── add-feature/SKILL.md
 │   ├── add-page/SKILL.md
 │   ├── add-component/SKILL.md
-│   └── add-integration/SKILL.md
-├── nestjs/                      # NestJS skills (4 skills)
+│   ├── add-integration/SKILL.md
+│   ├── add-auth/SKILL.md
+│   ├── add-test/SKILL.md
+│   └── add-form/SKILL.md
+├── nestjs/                      # NestJS skills (7 skills)
 │   ├── AGENT.md
 │   ├── INDEX.md
 │   ├── scaffold/SKILL.md
 │   ├── code-standards/SKILL.md
 │   ├── add-module/SKILL.md
-│   └── add-test/SKILL.md
-└── shared/                      # Cross-stack skills (1 skill)
+│   ├── add-test/SKILL.md
+│   ├── add-auth/SKILL.md
+│   ├── add-database/SKILL.md
+│   └── add-integration/SKILL.md
+└── shared/                      # Cross-stack skills (3 skills)
     ├── INDEX.md
-    └── task-management/SKILL.md
+    ├── task-management/SKILL.md
+    ├── full-stack-pairing/SKILL.md
+    └── remove-example/SKILL.md
 ```
 
 ## Skill Format

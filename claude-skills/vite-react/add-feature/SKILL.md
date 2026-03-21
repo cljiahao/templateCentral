@@ -17,8 +17,8 @@ Create a new self-contained feature module in a Vite + React project scaffolded 
 
 ```
 src/features/<feature-name>/
-├── api/                         # Data access services
-│   ├── <name>-service.ts        # Service with fetch calls to /api/*
+├── api/                         # Data access services (calls to external backend API)
+│   ├── <name>-service.ts        # Service with fetch calls to backend endpoints
 │   └── index.ts
 ├── components/                  # Feature-specific UI
 │   └── index.ts
@@ -56,7 +56,9 @@ export const STATUS_OPTIONS = [
 
 ### 4. Create API Services (in `api/`)
 
-Client-side services that fetch data from the backend API:
+Client-side services that fetch data from the backend API.
+
+> **Important**: `ENV.API_BASE_URL` is typed as `string | undefined` in the template. Before using it in services, ensure `VITE_API_BASE_URL` is set in `.env` — or add a non-undefined accessor to `env.ts` (e.g., a getter that throws if missing).
 
 ```ts
 // api/project-service.ts
@@ -64,9 +66,11 @@ import { ENV } from '@/lib/constants/env';
 import { APIError } from '@/lib/errors';
 import type { ProjectItem } from '../types';
 
+const API_BASE = ENV.API_BASE_URL ?? '';
+
 export const ProjectService = {
   getAll: async (): Promise<ProjectItem[]> => {
-    const res = await fetch(`${ENV.API_BASE_URL}/projects`);
+    const res = await fetch(`${API_BASE}/projects`);
     if (!res.ok) {
       throw new APIError({ statusCode: res.status, data: await res.json().catch(() => ({ message: 'Failed to fetch projects' })) });
     }
@@ -74,7 +78,7 @@ export const ProjectService = {
   },
 
   getById: async (id: string): Promise<ProjectItem> => {
-    const res = await fetch(`${ENV.API_BASE_URL}/projects/${id}`);
+    const res = await fetch(`${API_BASE}/projects/${id}`);
     if (!res.ok) {
       throw new APIError({ statusCode: res.status, data: await res.json().catch(() => ({ message: 'Project not found' })) });
     }
@@ -132,10 +136,11 @@ Export from barrel: `hooks/index.ts`
 // index.ts
 export * from './components';
 export * from './hooks';
+export * from './constants';
 export type { ProjectItem } from './types';
 ```
 
-Export types that consumers need (e.g., for typed props or state). Only export what consumers outside the feature need.
+Export constants that consumers need (e.g., static data for rendering). Export types for typed props or state. Only export what consumers outside the feature need.
 
 ### 8. Validate
 

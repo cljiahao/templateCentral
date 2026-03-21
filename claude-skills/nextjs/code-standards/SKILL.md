@@ -12,7 +12,7 @@ Coding standards and conventions for Next.js projects scaffolded from templateCe
 All files use **kebab-case** (lowercase, hyphen-separated).
 
 ### Exceptions (Next.js special files)
-- `layout.tsx`, `page.tsx`, `route.ts`, `not-found.tsx`, `loading.tsx`, `template.tsx`
+- `layout.tsx`, `page.tsx`, `route.ts`, `not-found.tsx`, `loading.tsx`, `error.tsx`, `template.tsx`
 - Dynamic route segments: `[id]`, `[...slug]`
 
 ## Exports & Variable Naming
@@ -89,6 +89,15 @@ They form a **chain** — must be used together to be effective:
 - Components only handle rendering
 - Static arrays, configuration objects, option lists → feature's `constants.ts`
 
+## Utility Classes
+
+The template provides these shared utilities:
+
+- **`cn()`** — Class merging utility (`clsx` + `tailwind-merge`) in `src/lib/utils/index.ts`. Use for conditional class composition
+- **`flex-center`** — Custom CSS utility (defined in `globals.css`) for `display: flex; align-items: center; justify-content: center`
+- **`flex-between`** — Custom CSS utility for `display: flex; align-items: center; justify-content: space-between`
+- **`max-w-site`** — Custom max-width utility for consistent page-width containers
+
 ## Barrel Exports
 
 - Each feature and shared folder has an `index.ts` re-exporting the public API
@@ -104,6 +113,6 @@ They form a **chain** — must be used together to be effective:
 - **Barrel exports** for features — `import { X } from '@/features/<name>'`. NEVER deep-import from features
 - **Static data** in `constants.ts`, NEVER inline in components
 - **Thin components** — delegate logic to hooks and services. NEVER put business logic in components
-- NEVER use `React.memo`, `useCallback`, or `useMemo` without profiling evidence — they add overhead in isolation
+- NEVER use `React.memo`, `useCallback`, or `useMemo` without profiling evidence — they add overhead in isolation. **Exception**: `useMemo`/`useCallback` are appropriate in React context providers to stabilize the context value and prevent unnecessary re-renders of all consumers
 - NEVER use `any` — use `unknown` and narrow with type guards
 - NEVER use inline styles — use Tailwind classes

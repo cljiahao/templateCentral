@@ -23,10 +23,13 @@ __tests__/
 
 ## Testing Approach
 
+The Next.js template uses `globals: false` in Vitest — always import `describe`, `it`, `expect`, `vi`, `beforeEach`, `afterEach` explicitly from `'vitest'`.
+
 Import route handler functions directly and call them with `Request` objects — no HTTP server needed:
 
 ```ts
 import { GET } from '@/app/api/projects/route';
+import { describe, expect, it } from 'vitest';
 
 describe('GET /api/projects', () => {
   it('should return all projects', async () => {
@@ -60,7 +63,7 @@ Place tests in `__tests__/api/` matching the route path:
 ```ts
 import { GET } from '@/app/api/projects/route';
 import { DB } from '@/integrations/factories';
-import { vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/integrations/factories', () => ({
   DB: vi.fn(),
@@ -105,7 +108,7 @@ describe('GET /api/projects', () => {
 ```ts
 import { POST } from '@/app/api/projects/route';
 import { DB } from '@/integrations/factories';
-import { vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/integrations/factories', () => ({
   DB: vi.fn(),
@@ -159,7 +162,7 @@ describe('POST /api/projects', () => {
 ```ts
 import { GET } from '@/app/api/projects/[id]/route';
 import { DB } from '@/integrations/factories';
-import { vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/integrations/factories', () => ({
   DB: vi.fn(),

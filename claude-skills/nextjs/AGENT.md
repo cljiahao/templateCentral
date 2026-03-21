@@ -18,7 +18,7 @@ You are a senior Next.js engineer and architecture expert. You scaffold new Next
 
 ## Stack
 
-Next.js 16, React 19, TypeScript 5.9, shadcn/ui (new-york), Tailwind CSS 4, TanStack React Query, React Hook Form + Zod, Framer Motion, Axios, Docker.
+Next.js 16, React 19, TypeScript 5.9, shadcn/ui (new-york), Tailwind CSS 4, TanStack React Query, NextAuth (Auth.js), React Hook Form + Zod, Framer Motion, Axios, Docker.
 
 ## Skills Available
 
@@ -31,23 +31,27 @@ Next.js 16, React 19, TypeScript 5.9, shadcn/ui (new-york), Tailwind CSS 4, TanS
 | `add-api-route/` | Adding a server-side API endpoint under `src/app/api/` |
 | `add-component/` | Creating a new React component |
 | `add-integration/` | Connecting to an external API (GitHub, Stripe, etc.) |
+| `add-auth/` | Configuring authentication — adding SSO providers, customizing login UI, protecting routes |
 | `add-test/` | Adding tests for API route handlers (backend only) |
+| `add-form/` | Adding a validated form (React Hook Form + Zod + CustomFormField) |
 
 ## Architecture Quick Reference
 
 ```
 src/
-├── proxy.ts                # Thin proxy (rewrites, redirects, headers — NOT for heavy auth logic)
+├── auth.ts                 # NextAuth config (providers, JWT callbacks, session)
+├── proxy.ts                # Next.js 16 proxy — route protection (wraps auth(), redirects unauthenticated users)
 ├── app/                    # Next.js App Router (pages, layouts, API routes)
-│   ├── layout.tsx          # Root layout (html, body, ThemeProvider, Toaster)
+│   ├── layout.tsx          # Root layout (html, body, ThemeProvider, Providers, Toaster)
 │   ├── globals.css         # Tailwind config, CSS custom properties
 │   ├── (public)/           # Public pages (no auth)
 │   ├── dashboard/          # Authenticated pages
-│   └── api/                # API route handlers
+│   └── api/                # API route handlers (includes auth/[...nextauth])
 ├── components/
 │   ├── layout/             # App shell (Navbar, Footer, Providers)
 │   ├── ui/                 # shadcn/ui primitives (via CLI)
 │   └── widgets/            # Reusable composed components
+├── features/auth/          # Auth feature (LoginCard, LoginButton, SignOutButton)
 ├── features/<name>/        # Feature modules
 │   ├── api/                # Data access services
 │   ├── components/         # Feature-specific UI

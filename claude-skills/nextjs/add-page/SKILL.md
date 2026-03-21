@@ -22,6 +22,8 @@ Create a new page/route in a Next.js project scaffolded from templateCentral.
 | Public page | `src/app/(public)/<path>/page.tsx` |
 | Dashboard/authenticated page | `src/app/dashboard/<path>/page.tsx` |
 
+> Dashboard pages are automatically protected by `src/proxy.ts` — any route not in `PUBLIC_PATHS` requires authentication. No manual auth checks needed in page components.
+
 > For API endpoints, use the `add-api-route` skill.
 
 Use **route groups** `(name)/` to share layouts without affecting the URL.
@@ -66,6 +68,8 @@ export default function AnalyticsLoading() {
 ```
 
 ### 4. Add Error Handling (Optional)
+
+The `error` prop contains the thrown error (with an optional `digest` for server errors). The `reset` function re-renders the route segment.
 
 ```tsx
 // src/app/dashboard/analytics/error.tsx
@@ -135,5 +139,5 @@ Confirm the build succeeds with no type errors. If adding a data-fetching page, 
 - Always add `loading.tsx` for data-fetching routes — omitting causes a blank screen
 - One layout per concern — NEVER nest multiple layouts unless each serves a distinct purpose
 - Use route groups `(name)/` for shared layouts without URL impact
-- NEVER use `'use client'` in page components unless absolutely necessary — prefer server components
+- NEVER use `'use client'` in `page.tsx` components — prefer server components. Note: `error.tsx` requires `'use client'` (Next.js constraint)
 - NEVER create pages outside the established route groups (`(public)/` or `dashboard/`) without reason

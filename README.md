@@ -17,26 +17,39 @@ templateCentral/
 │   │   ├── add-api-route/          #   Add an API route handler
 │   │   ├── add-component/          #   Add a component
 │   │   ├── add-integration/        #   Add a third-party integration
-│   │   └── add-test/               #   Add API route tests (Vitest)
+│   │   ├── add-auth/               #   Add/configure authentication
+│   │   ├── add-test/               #   Add API route tests (Vitest)
+│   │   └── add-form/               #   Add a validated form
 │   ├── fastapi/                    # All FastAPI skills
 │   │   ├── scaffold/               #   Scaffold a new project
 │   │   ├── code-standards/         #   Python/FastAPI coding standards
 │   │   ├── add-endpoint/           #   Add a FastAPI endpoint
-│   │   └── add-test/               #   Add pytest tests
+│   │   ├── add-test/               #   Add pytest tests
+│   │   ├── add-auth/               #   Add JWT authentication
+│   │   ├── add-database/           #   Add SQLAlchemy + Alembic
+│   │   └── add-integration/        #   Add an external API integration
 │   ├── vite-react/                 # All Vite + React skills
 │   │   ├── scaffold/               #   Scaffold a new project
 │   │   ├── code-standards/         #   Coding standards & conventions
 │   │   ├── add-feature/            #   Add a feature module
 │   │   ├── add-page/               #   Add a page/route
 │   │   ├── add-component/          #   Add a component
-│   │   └── add-integration/        #   Add an external API integration
+│   │   ├── add-integration/        #   Add an external API integration
+│   │   ├── add-auth/               #   Add/configure authentication
+│   │   ├── add-test/               #   Add component/hook/service tests
+│   │   └── add-form/               #   Add a validated form
 │   ├── nestjs/                     # All NestJS skills
 │   │   ├── scaffold/               #   Scaffold a new project
 │   │   ├── code-standards/         #   Coding standards & conventions
 │   │   ├── add-module/             #   Add a feature module with CRUD
-│   │   └── add-test/               #   Add unit/e2e tests
+│   │   ├── add-test/               #   Add unit/e2e tests
+│   │   ├── add-auth/               #   Add JWT authentication
+│   │   ├── add-database/           #   Add Prisma ORM
+│   │   └── add-integration/        #   Add an external API integration
 │   └── shared/                     # Cross-stack skills
-│       └── task-management/        #   Opt-in structured task management
+│       ├── task-management/        #   Opt-in structured task management
+│       ├── full-stack-pairing/     #   Connect frontend to backend (proxy, CORS, env vars)
+│       └── remove-example/         #   Remove example/demo code from scaffolded project
 └── templates/                      # Project templates
     ├── nextjs/                     # Next.js 16 + React 19 + shadcn/ui + Tailwind
     ├── fastapi/                    # FastAPI + layered architecture + Pydantic v2
@@ -50,18 +63,18 @@ templateCentral/
 |----------|-------|--------|
 | **nextjs** | Next.js 16, React 19, shadcn/ui, Tailwind CSS 4, React Query, React Hook Form, Framer Motion, Docker | Ready |
 | **fastapi** | FastAPI 0.116, Pydantic v2 (camelCase schemas), layered architecture, Ruff, pytest, Docker | Ready |
-| **vite-react** | Vite 8, React 19, React Router 7, TanStack Query, Tailwind CSS 4, Docker | Ready |
+| **vite-react** | Vite 8, React 19, React Router 7, TanStack Query, shadcn/ui, Tailwind CSS 4, React Hook Form, Framer Motion, Docker | Ready |
 | **nestjs** | NestJS 11, Fastify, Zod + nestjs-zod, Swagger, TypeScript 5.9, Jest, Docker | Ready |
 
 ## Available Skills
 
 Skills are organized by stack. Each skill has YAML frontmatter (`name`, `description`) per the [Agent Skills spec](https://agentskills.io/specification). See each stack's index for the full listing:
 
-- [Next.js skills](claude-skills/nextjs/INDEX.md) — 8 skills (scaffold, code-standards, add-feature, add-page, add-api-route, add-component, add-integration, add-test)
-- [FastAPI skills](claude-skills/fastapi/INDEX.md) — 4 skills (scaffold, code-standards, add-endpoint, add-test)
-- [Vite + React skills](claude-skills/vite-react/INDEX.md) — 6 skills (scaffold, code-standards, add-feature, add-page, add-component, add-integration)
-- [NestJS skills](claude-skills/nestjs/INDEX.md) — 4 skills (scaffold, code-standards, add-module, add-test)
-- [Shared skills](claude-skills/shared/INDEX.md) — 1 skill (task-management)
+- [Next.js skills](claude-skills/nextjs/INDEX.md) — 10 skills (scaffold, code-standards, add-feature, add-page, add-api-route, add-component, add-integration, add-auth, add-test, add-form)
+- [FastAPI skills](claude-skills/fastapi/INDEX.md) — 7 skills (scaffold, code-standards, add-endpoint, add-test, add-auth, add-database, add-integration)
+- [Vite + React skills](claude-skills/vite-react/INDEX.md) — 9 skills (scaffold, code-standards, add-feature, add-page, add-component, add-integration, add-auth, add-test, add-form)
+- [NestJS skills](claude-skills/nestjs/INDEX.md) — 7 skills (scaffold, code-standards, add-module, add-test, add-auth, add-database, add-integration)
+- [Shared skills](claude-skills/shared/INDEX.md) — 3 skills (task-management, full-stack-pairing, remove-example)
 
 ## Getting Started
 

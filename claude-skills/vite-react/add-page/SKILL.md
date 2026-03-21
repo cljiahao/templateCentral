@@ -38,7 +38,9 @@ Note: Use **named exports** — unlike Next.js, there is no `export default` req
 
 ### 2. Add the Route to the Router
 
-In `src/router.tsx`, add the route inside the `<Route element={<RootLayout />}>` wrapper:
+In `src/router.tsx`, add the route inside the `<Route element={<RootLayout />}>` wrapper.
+
+For **public** routes, place them alongside existing public routes:
 
 ```tsx
 import { AnalyticsPage } from '@/pages/analytics';
@@ -46,12 +48,23 @@ import { AnalyticsPage } from '@/pages/analytics';
 <Route path="analytics" element={<AnalyticsPage />} />
 ```
 
+For **protected** routes, nest them inside the `<ProtectedRoute />` wrapper — this redirects unauthenticated users to `/login`:
+
+```tsx
+<Route element={<ProtectedRoute />}>
+  <Route path="dashboard" element={<DashboardPage />} />
+  <Route path="analytics" element={<AnalyticsPage />} />
+</Route>
+```
+
 For nested routes:
 
 ```tsx
-<Route path="dashboard">
-  <Route index element={<DashboardPage />} />
-  <Route path="analytics" element={<AnalyticsPage />} />
+<Route element={<ProtectedRoute />}>
+  <Route path="dashboard">
+    <Route index element={<DashboardPage />} />
+    <Route path="analytics" element={<AnalyticsPage />} />
+  </Route>
 </Route>
 ```
 
@@ -129,6 +142,7 @@ Confirm the build succeeds with no type errors and all tests pass.
 - Always add to `src/pages/index.ts` barrel export
 - Always add to `src/lib/constants/routes.ts`
 - Always add the `<Route>` in `src/router.tsx` — the page won't be accessible otherwise
+- Protected pages MUST be nested inside `<Route element={<ProtectedRoute />}>` in `src/router.tsx` — otherwise unauthenticated users can access them
 - Use layout routes for shared navigation/chrome
 - Named exports only — NEVER use `export default`
 - NEVER hardcode route paths in components — use `PAGE_ROUTES` constants
