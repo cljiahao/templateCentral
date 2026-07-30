@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+---
+
+## [5.12.0] — 2026-07-30
+
 ### Added
 
 - **`templatecentral:add (redaction)`** — opt-in capability that masks real IPs/domains in tool output
