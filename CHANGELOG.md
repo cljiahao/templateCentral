@@ -10,6 +10,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [5.11.1] — 2026-07-30
+
+### Fixed
+
+- **Lefthook `prepare` script broke Docker builds on the three TS scaffolds.** `pnpm i --frozen-lockfile` / `npm ci` / `yarn install` in the Dockerfile `deps` stage triggers the root `"prepare": "lefthook install"` script, which hard-errors when `.git` isn't present — and it never is, since `.dockerignore` correctly excludes it and that stage only copies `package.json`/lockfiles anyway. Verified against lefthook's own Go source (`internal/command/install.go`, `git/repo.go`): unlike husky (which checks `existsSync('.git')` in `index.js` and no-ops gracefully, never returning a non-zero exit for any reason), lefthook's `install` command has no env-var or missing-`.git` graceful-skip anywhere in the call path — `LEFTHOOK=0` only gates hook *execution* inside the already-installed hook script, not the `install` subcommand itself. Fixed by changing the `prepare` script to `"lefthook install || true"` — the same fault-tolerance pattern husky documents natively (`skills/scaffold/nextjs/config-files.md`, `nestjs/config-files.md`, `vite-react/config-files.md`; FastAPI unaffected — no npm lifecycle script in that stack). The canonical shared source (`skills/scaffold/shared/harness-kit.md` Step B2 "Install wiring") had the same unfixed instruction — fixed there too, since it's what `migrate` and any future scaffold read as SSOT.
+- **Next.js floor raised to `≥16.2.11`** (`.claude/rules/nextjs.md`, scaffold `package.json` pin `^16.2.9`→`^16.2.11`) — the July 2026 coordinated Next.js security release (`nextjs.org/blog/july-2026-security-release`) fixed 4 High-severity CVEs below this version, most notably **CVE-2026-64642**: a Turbopack + single-locale middleware/proxy bypass that skips auth checks entirely — directly relevant to this project's `proxy.ts` auth pattern. Also fixed: SSRF via `rewrites()`/`redirects()` with attacker-controlled hostnames (CVE-2026-64645), SSRF in Server Actions on custom servers (CVE-2026-64649), and a Server Actions DoS (CVE-2026-64641). `skills/add/auth/nextjs.md` previously hardcoded its own stale `≥16.2.6` floor (a *different*, earlier proxy-bypass advisory) — de-duplicated to defer to `.claude/rules/nextjs.md` as SSOT instead of maintaining a second, independently-drifting version number.
+
+---
+
 ## [5.11.0] — 2026-07-15
 
 ### Added
