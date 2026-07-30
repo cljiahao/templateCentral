@@ -92,7 +92,7 @@ Each scaffold produces a complete, working project — not a bare starter.
 ✅ NestJS + Fastify · ✅ Swagger docs · ✅ nestjs-pino + nestjs-zod · ✅ Vitest + e2e tests  
 ✅ Prettier + ESLint (hard comment gate) + lefthook
 
-> Add capabilities via `templatecentral:add` — `auth · database · page · feature · endpoint · form · integration · test · logging · error-handling · pagination · mutation-testing · ai-security · documentation` — keeping the base scaffold clean.
+> Add capabilities via `templatecentral:add` — `auth · database · page · feature · endpoint · form · integration · test · logging · error-handling · pagination · mutation-testing · ai-security · documentation · redaction` — keeping the base scaffold clean.
 
 ---
 
