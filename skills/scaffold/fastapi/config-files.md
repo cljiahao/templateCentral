@@ -408,8 +408,14 @@ line-length = 88
 target-version = "py313"
 
 [tool.ruff.lint]
-# I = isort; ERA = flag commented-out code (comment hygiene — see templatecentral:standards code-standards/comments.md).
-extend-select = ["I", "ERA"]
+# E4/E7/E9/F = ruff's historical default set; I = isort; ERA = flag commented-out code (comment
+# hygiene — see templatecentral:standards code-standards/comments.md). Pinned explicitly via
+# `select` (not `extend-select`) because merely having a [tool.ruff] table present makes ruff
+# enable ~400 rules across ~38 categories by default as of ruff 0.15+ — `extend-select` would
+# layer onto that much larger set instead of the intended minimal baseline (verified: an
+# unqualified `extend-select = ["I", "ERA"]` here produces real lint failures on generated
+# scaffold source from categories like PIE/PYI/DTZ/UP that were never meant to be enabled).
+select = ["E4", "E7", "E9", "F", "I", "ERA"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "test"]

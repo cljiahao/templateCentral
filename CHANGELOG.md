@@ -8,6 +8,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **`templatecentral:add (redaction)`** — opt-in capability that masks real IPs/domains in tool output
+  before it reaches the model, via a `PostToolUse` hook (`Bash|Read|Grep|Glob`), against a
+  project-declared config of real CIDRs/domain suffixes. Structure-preserving synthetic replacement
+  (RFC 1918 `10.0.0.0/8` primary space, RFC 2544 `198.18.0.0/15` fallback when a configured real range
+  would collide with the primary space, RFC 2606 `.example` for domains), persisted append-only mapping
+  for cross-session consistency, and a warn-only companion check in `user-prompt-guard` for the
+  human-paste case. `permissions.deny` and `protect-files.sh` both extended to block the agent from
+  reading the config/map files directly — load-bearing, since the config contains the real values the
+  capability exists to hide. Registered in `skills/add/SKILL.md`, `AGENTS.md`, `README.md`.
+
+### Fixed
+
+- **FastAPI scaffold's `pyproject.toml` ruff config silently enabled ~400 rules across ~38 categories
+  instead of the intended ~4.** `extend-select = ["I", "ERA"]` assumed it layered onto ruff's historical
+  minimal default (`E4`/`E7`/`E9`/`F`) — as of ruff 0.15+, merely having a `[tool.ruff]` table present
+  changes ruff's default rule selection, so `extend-select` layered onto a far broader set instead.
+  Verified by direct reproduction: the exact scaffolded config flags real `PIE790`/`PYI063`/`DTZ005`/
+  `UP043` findings on generated scaffold source that were never meant to be enabled. Fixed by pinning
+  `select = ["E4", "E7", "E9", "F", "I", "ERA"]` explicitly instead of relying on implicit defaults —
+  robust against future ruff default changes regardless of version, since the rule set no longer depends
+  on what ruff considers "default" (`skills/scaffold/fastapi/config-files.md`).
+
 ---
 
 ## [5.11.1] — 2026-07-30
