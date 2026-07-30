@@ -31,7 +31,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "prettier --check . && eslint . && tsc --noEmit",
-    "prepare": "lefthook install"
+    "prepare": "lefthook install || true"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",

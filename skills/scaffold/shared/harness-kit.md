@@ -837,7 +837,7 @@ paths = [
 ```
 
 **Install wiring:**
-- **TS stacks** — add `lefthook` to `devDependencies` and a `"prepare": "lefthook install"` script to `package.json` (the `prepare` script runs after every `pnpm install`, so hooks self-install on clone). Freshen the `lefthook` pin with the review utility.
+- **TS stacks** — add `lefthook` to `devDependencies` and a `"prepare": "lefthook install || true"` script to `package.json` (the `prepare` script runs after every `pnpm install`, so hooks self-install on clone; the `|| true` keeps Docker builds — which exclude `.git` via `.dockerignore` — from failing, since `lefthook install` hard-errors when no `.git` is present and has no built-in graceful skip). Freshen the `lefthook` pin with the review utility.
 - **FastAPI** — add `lefthook` to `requirements-dev.txt` (it is an official PyPI package — `pip install lefthook` installs the Go binary, no Node needed) and run `lefthook install` once after install; document it in the README setup steps. *(Verified: `pip install lefthook` → 2.x, `lefthook validate` passes, hooks fire.)*
 - **gitleaks** is a system binary, not a package dependency. The pre-commit command soft-skips when it is absent (CI is the hard gate); document `brew install gitleaks` / the release binary in the README.
 
@@ -1204,7 +1204,7 @@ sha256_regenh=$(shasum -a 256 .claude/regen-harness.sh | cut -d' ' -f1)
 **`.claude/harness.json`** (substitute stack name, verify-skill path, and computed hashes):
 ```json
 {
-  "templatecentral_version": "5.11.0",
+  "templatecentral_version": "5.12.0",
   "stack": "<stack>",
   "seeded_at": "<ISO-date>",
   "seeded_files": {

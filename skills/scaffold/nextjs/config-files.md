@@ -33,7 +33,7 @@ Write these files exactly as shown.
     "check": "prettier --check . && eslint . && tsc --noEmit && node scripts/check-route-logging.mjs",
     "test": "vitest run",
     "test:ci": "vitest run --coverage",
-    "prepare": "lefthook install"
+    "prepare": "lefthook install || true"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.0",
@@ -41,7 +41,7 @@ Write these files exactly as shown.
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.17.0",
-    "next": "^16.2.9",
+    "next": "^16.2.11",
     "next-themes": "^0.4.6",
     "pino": "^10.3.1",
     "react": "^19.2.7",

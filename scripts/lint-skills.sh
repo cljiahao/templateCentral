@@ -921,6 +921,25 @@ check_no_husky() {
   fi
 }
 
+check_lefthook_prepare_has_fallback() {
+  # lefthook's "install" CLI command has no graceful skip when .git is absent (verified against
+  # lefthook's own Go source — unlike husky, which checks existsSync('.git') and no-ops). Every
+  # TS scaffold's Dockerfile `deps` stage runs `pnpm i`/`npm ci` before `.git` exists in the build
+  # context (dockerignored), which fires the "prepare" script and hard-fails the install unless it
+  # tolerates a non-zero exit. A bare "lefthook install" prepare script (missing `|| true`) breaks
+  # every Docker build derived from it.
+  # TIMELESS: lefthook's install-command behavior is a fixed property of the tool, not ecosystem drift.
+  header "lefthook prepare script has Docker-safe fallback"
+  local matches
+  matches=$(grep -rn '"prepare":[[:space:]]*"lefthook install"' "$SKILLS_DIR/" 2>/dev/null || true)
+  if [[ -n "$matches" ]]; then
+    echo "$matches"
+    fail "prepare script runs bare 'lefthook install' with no fallback — breaks Docker builds (.git absent in build context). Use \"lefthook install || true\"."
+  else
+    pass "All lefthook prepare scripts tolerate a missing .git"
+  fi
+}
+
 # ── RUN ALL CHECKS ─────────────────────────────────────────────────────────────
 
 echo "=== templateCentral skill lint ==="
@@ -945,6 +964,7 @@ check_no_absolute_plugin_path
 check_skilldir_refs_resolve
 check_ref_header_prereq_suffix
 check_no_husky
+check_lefthook_prepare_has_fallback
 check_no_bare_nextjs_route_handlers
 check_no_postToolUse_full_test_suite
 check_no_bare_pytest_invocation

@@ -32,7 +32,7 @@
     "test:cov": "vitest --run --coverage",
     "test:e2e": "vitest --run --config vitest.config.e2e.ts",
     "test:ci": "vitest --run --coverage && vitest --run --config vitest.config.e2e.ts",
-    "prepare": "lefthook install"
+    "prepare": "lefthook install || true"
   },
   "dependencies": {
     "@fastify/helmet": "^13.0.2",

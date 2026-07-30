@@ -9,7 +9,7 @@ Add authentication to a Next.js project scaffolded from templateCentral. Uses **
 
 Requires a project scaffolded with `templatecentral:scaffold`. See Step 0.
 
-> **Security requirement**: Next.js ≥16.2.6. Versions 16.2.5 and earlier have a high-severity security advisory — RSC prefetch requests can bypass `proxy.ts` auth on Turbopack deployments (incomplete fix in 16.2.5). Verify `package.json` → `next` before proceeding.
+> **Security requirement**: meet the Next.js floor in `.claude/rules/nextjs.md` — two separate high-severity advisories have shipped fixes for Turbopack `proxy.ts`/middleware auth bypasses (an RSC prefetch bypass, and a July 2026 single-locale middleware bypass), so an outdated pin can silently defeat the auth this skill sets up. Verify `package.json` → `next` before proceeding.
 
 ### Files this skill creates
 

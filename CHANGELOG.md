@@ -10,6 +10,43 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [5.12.0] — 2026-07-30
+
+### Added
+
+- **`templatecentral:add (redaction)`** — opt-in capability that masks real IPs/domains in tool output
+  before it reaches the model, via a `PostToolUse` hook (`Bash|Read|Grep|Glob`), against a
+  project-declared config of real CIDRs/domain suffixes. Structure-preserving synthetic replacement
+  (RFC 1918 `10.0.0.0/8` primary space, RFC 2544 `198.18.0.0/15` fallback when a configured real range
+  would collide with the primary space, RFC 2606 `.example` for domains), persisted append-only mapping
+  for cross-session consistency, and a warn-only companion check in `user-prompt-guard` for the
+  human-paste case. `permissions.deny` and `protect-files.sh` both extended to block the agent from
+  reading the config/map files directly — load-bearing, since the config contains the real values the
+  capability exists to hide. Registered in `skills/add/SKILL.md`, `AGENTS.md`, `README.md`.
+
+### Fixed
+
+- **FastAPI scaffold's `pyproject.toml` ruff config silently enabled ~400 rules across ~38 categories
+  instead of the intended ~4.** `extend-select = ["I", "ERA"]` assumed it layered onto ruff's historical
+  minimal default (`E4`/`E7`/`E9`/`F`) — as of ruff 0.15+, merely having a `[tool.ruff]` table present
+  changes ruff's default rule selection, so `extend-select` layered onto a far broader set instead.
+  Verified by direct reproduction: the exact scaffolded config flags real `PIE790`/`PYI063`/`DTZ005`/
+  `UP043` findings on generated scaffold source that were never meant to be enabled. Fixed by pinning
+  `select = ["E4", "E7", "E9", "F", "I", "ERA"]` explicitly instead of relying on implicit defaults —
+  robust against future ruff default changes regardless of version, since the rule set no longer depends
+  on what ruff considers "default" (`skills/scaffold/fastapi/config-files.md`).
+
+---
+
+## [5.11.1] — 2026-07-30
+
+### Fixed
+
+- **Lefthook `prepare` script broke Docker builds on the three TS scaffolds.** `pnpm i --frozen-lockfile` / `npm ci` / `yarn install` in the Dockerfile `deps` stage triggers the root `"prepare": "lefthook install"` script, which hard-errors when `.git` isn't present — and it never is, since `.dockerignore` correctly excludes it and that stage only copies `package.json`/lockfiles anyway. Verified against lefthook's own Go source (`internal/command/install.go`, `git/repo.go`): unlike husky (which checks `existsSync('.git')` in `index.js` and no-ops gracefully, never returning a non-zero exit for any reason), lefthook's `install` command has no env-var or missing-`.git` graceful-skip anywhere in the call path — `LEFTHOOK=0` only gates hook *execution* inside the already-installed hook script, not the `install` subcommand itself. Fixed by changing the `prepare` script to `"lefthook install || true"` — the same fault-tolerance pattern husky documents natively (`skills/scaffold/nextjs/config-files.md`, `nestjs/config-files.md`, `vite-react/config-files.md`; FastAPI unaffected — no npm lifecycle script in that stack). The canonical shared source (`skills/scaffold/shared/harness-kit.md` Step B2 "Install wiring") had the same unfixed instruction — fixed there too, since it's what `migrate` and any future scaffold read as SSOT.
+- **Next.js floor raised to `≥16.2.11`** (`.claude/rules/nextjs.md`, scaffold `package.json` pin `^16.2.9`→`^16.2.11`) — the July 2026 coordinated Next.js security release (`nextjs.org/blog/july-2026-security-release`) fixed 4 High-severity CVEs below this version, most notably **CVE-2026-64642**: a Turbopack + single-locale middleware/proxy bypass that skips auth checks entirely — directly relevant to this project's `proxy.ts` auth pattern. Also fixed: SSRF via `rewrites()`/`redirects()` with attacker-controlled hostnames (CVE-2026-64645), SSRF in Server Actions on custom servers (CVE-2026-64649), and a Server Actions DoS (CVE-2026-64641). `skills/add/auth/nextjs.md` previously hardcoded its own stale `≥16.2.6` floor (a *different*, earlier proxy-bypass advisory) — de-duplicated to defer to `.claude/rules/nextjs.md` as SSOT instead of maintaining a second, independently-drifting version number.
+
+---
+
 ## [5.11.0] — 2026-07-15
 
 ### Added
