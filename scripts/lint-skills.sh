@@ -98,17 +98,20 @@ check_no_hardcoded_secrets() {
 }
 
 check_no_comment_narration() {
-  # Change-narration comments ("was X, now Y", "MOVED to...", version refs) are short-lived
-  # by definition and rot the moment the described change is no longer recent — the same
-  # doctrine seeded into every scaffolded project via comments.md. Applies here too:
-  # scripts/*.sh (this repo's own implementation) and bash code fences embedded in skill
-  # markdown (the seed content that ships into every scaffolded hook/lefthook/CI snippet).
+  # Change-narration comments rot once the change is no longer recent — same doctrine as
+  # comments.md, applied here to scripts/*.sh and bash fences in skill markdown.
   header "Change-narration comments"
   local patterns="skills/scaffold/shared/comment-hygiene-patterns.txt"
   if [[ ! -f "$patterns" ]]; then
     fail "Missing $patterns"
     return
   fi
+  # This check blocks CI (lint-patterns has no bypass label), so — like the CI gate seeded into
+  # scaffolded projects — it reads only the first 10 (anchored keyword) lines, never the last 3
+  # (date/ticket/issue-ref), which false-positive on legitimate terms like UTF-8/SHA-256/RFC-7231.
+  local strict_patterns
+  strict_patterns=$(mktemp)
+  head -n 10 "$patterns" > "$strict_patterns"
   local matches="" f line stripped md_file in_bash
 
   for f in scripts/*.sh; do
@@ -116,7 +119,7 @@ check_no_comment_narration() {
     while IFS= read -r line; do
       if [[ "$line" =~ ^[[:space:]]*# ]]; then
         stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*#[[:space:]]?@@')
-        if [[ -n "$stripped" ]] && grep -qEf "$patterns" <<< "$stripped"; then
+        if [[ -n "$stripped" ]] && grep -qEf "$strict_patterns" <<< "$stripped"; then
           matches="$matches
 $f: $stripped"
         fi
@@ -134,13 +137,14 @@ $f: $stripped"
       [[ "$in_bash" -eq 1 ]] || continue
       if [[ "$line" =~ ^[[:space:]]*# ]]; then
         stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*#[[:space:]]?@@')
-        if [[ -n "$stripped" ]] && grep -qEf "$patterns" <<< "$stripped"; then
+        if [[ -n "$stripped" ]] && grep -qEf "$strict_patterns" <<< "$stripped"; then
           matches="$matches
 $md_file: $stripped"
         fi
       fi
     done < "$md_file"
   done < <(find "$SKILLS_DIR" -name '*.md' -print0)
+  rm -f "$strict_patterns"
 
   if [[ -n "$matches" ]]; then
     echo "$matches"
@@ -810,6 +814,32 @@ check_scaffold_seeds_complete_harness() {
   fi
 }
 
+check_migrate_hook_inventory_matches_kit() {
+  # migrate/general/implementation.md enumerates the kit's hooks by name in prose (Step 4d),
+  # separate from the kit's own authoring blocks — a hook added to the kit without updating
+  # that list leaves every migrated project short a hook.
+  header "migrate hook inventory matches harness-kit.md"
+  local kit="$SKILLS_DIR/scaffold/shared/harness-kit.md"
+  local migrate="$SKILLS_DIR/migrate/general/implementation.md"
+  if [[ ! -f "$kit" || ! -f "$migrate" ]]; then
+    fail "Missing $kit or $migrate"
+    return
+  fi
+  local hooks missing="" h
+  hooks=$(grep -oE '^\*\*`\.claude/hooks/[a-zA-Z0-9_-]+' "$kit" | sed -E 's#.*/##' | sort -u)
+  for h in $hooks; do
+    grep -qF -- "$h" "$migrate" || missing+="migrate is missing hook: $h"$'\n'
+  done
+  grep -qF -- '.claude/comment-hygiene-patterns.txt' "$migrate" || \
+    missing+="migrate does not mention .claude/comment-hygiene-patterns.txt"$'\n'
+  if [[ -n "$missing" ]]; then
+    echo "$missing"
+    fail "migrate's hook/file inventory has drifted from harness-kit.md — update skills/migrate/general/implementation.md Step 4d"
+  else
+    pass "migrate's hook inventory covers every hook + file authored in harness-kit.md"
+  fi
+}
+
 check_no_absolute_plugin_path() {
   # References load via the <skill-dir> placeholder (the tool-provided skill directory at invocation),
   # never an absolute install path, and never ${CLAUDE_SKILL_DIR} (empty in agent-run bash — only
@@ -1019,6 +1049,7 @@ check_no_unscoped_bash_grant
 check_seeded_skill_paths_are_directories
 check_no_toplevel_command_in_hooks
 check_scaffold_seeds_complete_harness
+check_migrate_hook_inventory_matches_kit
 check_no_absolute_plugin_path
 check_skilldir_refs_resolve
 check_ref_header_prereq_suffix

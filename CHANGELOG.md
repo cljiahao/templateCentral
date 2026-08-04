@@ -10,6 +10,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [5.13.0] — 2026-08-05
+
+### Added
+
+- **Comment hygiene enforcement** — mechanical, three-tier detection of change-narration comments
+  (`// was X, now Y`) and oversized comment blocks, seeded into every scaffolded/migrated project and
+  into this repo's own CI. A single canonical pattern list
+  (`skills/scaffold/shared/comment-hygiene-patterns.txt`) is the source of truth every surface reads at
+  runtime: a live `PostToolUse` hook (feedback via `hookSpecificOutput.additionalContext`, both TS and
+  FastAPI variants), a warn-only lefthook pre-commit command, and a hard CI gate scoped to added lines
+  only and to the 10 high-precision keyword patterns (excluding the lower-precision date/ticket/issue-ref
+  patterns, which stay advisory-only to avoid false-positiving on terms like `UTF-8`/`SHA-256`/`RFC-7231`).
+  Bypassable per-PR via a `skip-comment-check` label. `templatecentral:migrate` seeds the same layer into
+  adopted projects. `scripts/lint-skills.sh` gained the equivalent check for this repo's own `scripts/*.sh`
+  and skill markdown, plus a cross-reference check that keeps `migrate`'s hook/file inventory in sync with
+  `harness-kit.md`.
+
+---
+
 ## [5.12.0] — 2026-07-30
 
 ### Added
