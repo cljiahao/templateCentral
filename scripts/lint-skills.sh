@@ -774,6 +774,12 @@ check_scaffold_seeds_complete_harness() {
     'subagent-stop.sh' 'session-context.sh'
     'stop_hook_active' '--no-verify' 'AKIA'
     'node' 'python3'
+    # Content-authoring token, not just a path reference: catches the class of bug where a
+    # seeded file's path is wired into settings.json/harness.json/protect-files.sh everywhere
+    # but the kit never actually authors its content — a scaffolded project ends up with every
+    # consumer pointing at a file that's never created, and verify-harness.sh then hard-fails
+    # on MISSING for every fresh scaffold. This exact gap shipped once in comment-hygiene-patterns.txt.
+    '[Ww][Aa][Ss][[:space:]]'
   )
   local missing="" tok
   if [[ ! -f "$kit" ]]; then

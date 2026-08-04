@@ -559,26 +559,29 @@ patterns=".claude/comment-hygiene-patterns.txt"
 
 flagged=""
 block_len=0
-while IFS= read -r line; do
-  if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//|\*|/\*\*?)'; then
-    stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*(#|//|\*|/\*\*?)[[:space:]]?@@')
-    if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
-      flagged="$flagged
-  - narration: $stripped"
-    fi
-    if printf '%s' "$line" | grep -qE '^[[:space:]]*//'; then
-      block_len=$((block_len + 1))
-    else
-      block_len=0
-    fi
-  else
-    if [ "$block_len" -gt 5 ]; then
-      flagged="$flagged
+prev_lineno=0
+while IFS= read -r cline; do
+  lineno="${cline%%:*}"
+  content="${cline#*:}"
+  if [ "$prev_lineno" -ne 0 ] && [ "$lineno" -ne $((prev_lineno + 1)) ]; then
+    [ "$block_len" -gt 5 ] && flagged="$flagged
   - oversized comment block ($block_len lines)"
-    fi
     block_len=0
   fi
-done < "$file"
+  stripped=$(printf '%s' "$content" | sed -E 's@^[[:space:]]*(#|//|\*|/\*\*?)[[:space:]]?@@')
+  if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
+    flagged="$flagged
+  - narration: $stripped"
+  fi
+  if printf '%s' "$content" | grep -qE '^[[:space:]]*//'; then
+    block_len=$((block_len + 1))
+  else
+    [ "$block_len" -gt 5 ] && flagged="$flagged
+  - oversized comment block ($block_len lines)"
+    block_len=0
+  fi
+  prev_lineno="$lineno"
+done < <(grep -nE '^[[:space:]]*(#|//|\*|/\*\*?)' "$file")
 [ "$block_len" -gt 5 ] && flagged="$flagged
   - oversized comment block ($block_len lines, end of file)"
 
@@ -608,26 +611,29 @@ patterns=".claude/comment-hygiene-patterns.txt"
 
 flagged=""
 block_len=0
-while IFS= read -r line; do
-  if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|""")'; then
-    stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*(#|""")[[:space:]]?@@')
-    if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
-      flagged="$flagged
-  - narration: $stripped"
-    fi
-    if printf '%s' "$line" | grep -qE '^[[:space:]]*#'; then
-      block_len=$((block_len + 1))
-    else
-      block_len=0
-    fi
-  else
-    if [ "$block_len" -gt 5 ]; then
-      flagged="$flagged
+prev_lineno=0
+while IFS= read -r cline; do
+  lineno="${cline%%:*}"
+  content="${cline#*:}"
+  if [ "$prev_lineno" -ne 0 ] && [ "$lineno" -ne $((prev_lineno + 1)) ]; then
+    [ "$block_len" -gt 5 ] && flagged="$flagged
   - oversized comment block ($block_len lines)"
-    fi
     block_len=0
   fi
-done < "$file"
+  stripped=$(printf '%s' "$content" | sed -E 's@^[[:space:]]*(#|""")[[:space:]]?@@')
+  if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
+    flagged="$flagged
+  - narration: $stripped"
+  fi
+  if printf '%s' "$content" | grep -qE '^[[:space:]]*#'; then
+    block_len=$((block_len + 1))
+  else
+    [ "$block_len" -gt 5 ] && flagged="$flagged
+  - oversized comment block ($block_len lines)"
+    block_len=0
+  fi
+  prev_lineno="$lineno"
+done < <(grep -nE '^[[:space:]]*(#|""")' "$file")
 [ "$block_len" -gt 5 ] && flagged="$flagged
   - oversized comment block ($block_len lines, end of file)"
 
@@ -638,6 +644,24 @@ exit 0
 ```
 
 **Scoping note:** narration scanning covers plain `#`/`//` lines and the opening line of a `"""`/`/** ` doc-comment block (the common single-line case, e.g. `"""Refactored to support X."""`). Deep multi-line docstring *body* scanning (continuation lines with no per-line marker) is out of scope for this pass.
+
+**`.claude/comment-hygiene-patterns.txt`** (identical across stacks — the canonical pattern list every comment-hygiene surface above, and the `comment-hygiene` lefthook command and CI job seeded later in this kit, read at runtime instead of hardcoding their own copy):
+```
+^[Ww][Aa][Ss][[:space:]]
+^[Aa][Dd][Dd][Ee][Dd][[:space:]]
+^[Rr][Ee][Mm][Oo][Vv][Ee][Dd][[:space:]]
+^[Cc][Hh][Aa][Nn][Gg][Ee][Dd][[:space:]]
+^[Uu][Pp][Dd][Aa][Tt][Ee][Dd][[:space:]]
+^[Rr][Ee][Nn][Aa][Mm][Ee][Dd][[:space:]]
+^[Mm][Oo][Vv][Ee][Dd][[:space:]]
+^[Rr][Ee][Ff][Aa][Cc][Tt][Oo][Rr][Ee][Dd][[:space:]]
+^[Pp][Ee][Rr] [Rr][Ee][Vv][Ii][Ee][Ww]
+^[Aa][Ss] [Rr][Ee][Qq][Uu][Ee][Ss][Tt][Ee][Dd]
+[0-9]{4}-[0-9]{2}-[0-9]{2}
+^[A-Z]{2,}-[0-9]+
+^#[0-9]+
+```
+The first 10 lines are the anchored change-narration keyword patterns (each spells out both cases per letter via bracket expressions — `grep -Ef`/`grep -qEf` is correct everywhere; never `-Eif`, since `-i` combined with the last two patterns would match ordinary lowercase text like `exit-2`). The last 3 lines (date, ticket-reference, issue-reference) are lower-precision — real tickets and legitimate technical terms (`ABC-123` vs. `UTF-8`) can be structurally identical, so the CI hard gate later in this kit reads only the first 10 lines; the two warn-only surfaces read all 13.
 
 ---
 
@@ -850,22 +874,26 @@ pre-commit:
           case "$f" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.py) ;; *) continue ;; esac
           [ -f "$f" ] || continue
           block_len=0
-          while IFS= read -r line; do
-            if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//|\*|"""|/\*\*?)'; then
-              stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*(#|//|\*|"""|/\*\*?)[[:space:]]?@@')
-              if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
-                flagged="$flagged\n  - $f: $stripped"
-              fi
-              if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//)'; then
-                block_len=$((block_len + 1))
-              else
-                block_len=0
-              fi
+          prev_lineno=0
+          while IFS= read -r cline; do
+            lineno="${cline%%:*}"
+            content="${cline#*:}"
+            if [ "$prev_lineno" -ne 0 ] && [ "$lineno" -ne $((prev_lineno + 1)) ]; then
+              [ "$block_len" -gt 5 ] && flagged="$flagged\n  - $f: oversized comment block ($block_len lines)"
+              block_len=0
+            fi
+            stripped=$(printf '%s' "$content" | sed -E 's@^[[:space:]]*(#|//|\*|"""|/\*\*?)[[:space:]]?@@')
+            if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
+              flagged="$flagged\n  - $f: $stripped"
+            fi
+            if printf '%s' "$content" | grep -qE '^[[:space:]]*(#|//)'; then
+              block_len=$((block_len + 1))
             else
               [ "$block_len" -gt 5 ] && flagged="$flagged\n  - $f: oversized comment block ($block_len lines)"
               block_len=0
             fi
-          done < "$f"
+            prev_lineno="$lineno"
+          done < <(grep -nE '^[[:space:]]*(#|//|\*|"""|/\*\*?)' "$f")
           [ "$block_len" -gt 5 ] && flagged="$flagged\n  - $f: oversized comment block ($block_len lines, end of file)"
         done
         if [ -n "$flagged" ]; then
@@ -942,22 +970,26 @@ pre-commit:
           case "$f" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.py) ;; *) continue ;; esac
           [ -f "$f" ] || continue
           block_len=0
-          while IFS= read -r line; do
-            if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//|\*|"""|/\*\*?)'; then
-              stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*(#|//|\*|"""|/\*\*?)[[:space:]]?@@')
-              if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
-                flagged="$flagged\n  - $f: $stripped"
-              fi
-              if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//)'; then
-                block_len=$((block_len + 1))
-              else
-                block_len=0
-              fi
+          prev_lineno=0
+          while IFS= read -r cline; do
+            lineno="${cline%%:*}"
+            content="${cline#*:}"
+            if [ "$prev_lineno" -ne 0 ] && [ "$lineno" -ne $((prev_lineno + 1)) ]; then
+              [ "$block_len" -gt 5 ] && flagged="$flagged\n  - $f: oversized comment block ($block_len lines)"
+              block_len=0
+            fi
+            stripped=$(printf '%s' "$content" | sed -E 's@^[[:space:]]*(#|//|\*|"""|/\*\*?)[[:space:]]?@@')
+            if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
+              flagged="$flagged\n  - $f: $stripped"
+            fi
+            if printf '%s' "$content" | grep -qE '^[[:space:]]*(#|//)'; then
+              block_len=$((block_len + 1))
             else
               [ "$block_len" -gt 5 ] && flagged="$flagged\n  - $f: oversized comment block ($block_len lines)"
               block_len=0
             fi
-          done < "$f"
+            prev_lineno="$lineno"
+          done < <(grep -nE '^[[:space:]]*(#|//|\*|"""|/\*\*?)' "$f")
           [ "$block_len" -gt 5 ] && flagged="$flagged\n  - $f: oversized comment block ($block_len lines, end of file)"
         done
         if [ -n "$flagged" ]; then
@@ -1121,18 +1153,18 @@ jobs:
         run: |
           patterns=".claude/comment-hygiene-patterns.txt"
           base="origin/${{ github.base_ref }}"
+          [ -f "$patterns" ] || { echo "::error::comment-hygiene pattern list missing (.claude/comment-hygiene-patterns.txt)"; exit 1; }
           flagged=""
           for f in $(git diff --name-only "$base"...HEAD); do
             case "$f" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.py) ;; *) continue ;; esac
             [ -f "$f" ] || continue
-            while IFS= read -r line; do
-              if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//|\*|"""|/\*\*?)'; then
-                stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*(#|//|\*|"""|/\*\*?)[[:space:]]?@@')
-                if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
-                  flagged="$flagged\n  - $f: $stripped"
-                fi
+            while IFS= read -r cline; do
+              content="${cline#*:}"
+              stripped=$(printf '%s' "$content" | sed -E 's@^[[:space:]]*(#|//|\*|"""|/\*\*?)[[:space:]]?@@')
+              if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf <(head -n 10 "$patterns"); then
+                flagged="$flagged\n  - $f: $stripped"
               fi
-            done < "$f"
+            done < <(grep -nE '^[[:space:]]*(#|//|\*|"""|/\*\*?)' "$f")
           done
           if [ -n "$flagged" ]; then
             echo " $LABELS " | grep -q ' skip-comment-check ' && { echo "skip-comment-check label present — OK"; exit 0; }
@@ -1142,6 +1174,8 @@ jobs:
             exit 1
           fi
 ```
+
+**Why only the first 10 lines of the pattern file feed this hard gate:** `comment-hygiene-patterns.txt` has 13 lines — 10 anchored change-narration keyword patterns, then a date pattern, a ticket-reference pattern, and an issue-reference pattern. The last three are unavoidably lower-precision: `^[A-Z]{2,}-[0-9]+` matches a real ticket code like `ABC-123`, but it matches identically shaped, entirely legitimate technical terms just as often — `UTF-8`, `SHA-256`, `RFC-7231` — when they open a comment (anchoring to comment-start, the fix that works for the keyword patterns, does not help here, since the collision is with the *first word* of the comment, not a mid-comment occurrence). A blocking gate cannot carry that false-positive rate. The live hook and lefthook command (both warn-only) still read the full 13-line file, so ticket/date/issue detection stays active as an advisory signal — it only drops out of the surface that can fail a PR.
 
 **`.github/workflows/ci.yml`** — FastAPI (swap the `quality` job; the `changelog`, `readme-freshness`, and `comment-hygiene` jobs are identical):
 ```yaml
