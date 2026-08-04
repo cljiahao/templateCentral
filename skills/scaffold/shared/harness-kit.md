@@ -560,8 +560,8 @@ patterns=".claude/comment-hygiene-patterns.txt"
 flagged=""
 block_len=0
 while IFS= read -r line; do
-  if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//|\*)'; then
-    stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*(#|//|\*)[[:space:]]?@@')
+  if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//|\*|/\*\*?)'; then
+    stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*(#|//|\*|/\*\*?)[[:space:]]?@@')
     if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
       flagged="$flagged
   - narration: $stripped"
@@ -851,8 +851,8 @@ pre-commit:
           [ -f "$f" ] || continue
           block_len=0
           while IFS= read -r line; do
-            if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//|\*|""")'; then
-              stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*(#|//|\*|""")[[:space:]]?@@')
+            if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//|\*|"""|/\*\*?)'; then
+              stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*(#|//|\*|"""|/\*\*?)[[:space:]]?@@')
               if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
                 flagged="$flagged\n  - $f: $stripped"
               fi
@@ -943,8 +943,8 @@ pre-commit:
           [ -f "$f" ] || continue
           block_len=0
           while IFS= read -r line; do
-            if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//|\*|""")'; then
-              stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*(#|//|\*|""")[[:space:]]?@@')
+            if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//|\*|"""|/\*\*?)'; then
+              stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*(#|//|\*|"""|/\*\*?)[[:space:]]?@@')
               if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
                 flagged="$flagged\n  - $f: $stripped"
               fi
@@ -1126,8 +1126,8 @@ jobs:
             case "$f" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.py) ;; *) continue ;; esac
             [ -f "$f" ] || continue
             while IFS= read -r line; do
-              if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//|\*|""")'; then
-                stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*(#|//|\*|""")[[:space:]]?@@')
+              if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//|\*|"""|/\*\*?)'; then
+                stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*(#|//|\*|"""|/\*\*?)[[:space:]]?@@')
                 if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
                   flagged="$flagged\n  - $f: $stripped"
                 fi
