@@ -839,6 +839,41 @@ pre-commit:
           printf '%s\n' "$missing"
         fi
         exit 0
+    comment-hygiene:
+      # Warn-only (never blocks): flags change-narration comments and oversized comment
+      # blocks. Patterns come from .claude/comment-hygiene-patterns.txt (see comments.md).
+      run: |
+        patterns=".claude/comment-hygiene-patterns.txt"
+        [ -f "$patterns" ] || exit 0
+        flagged=""
+        for f in $(git diff --cached --name-only); do
+          case "$f" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.py) ;; *) continue ;; esac
+          [ -f "$f" ] || continue
+          block_len=0
+          while IFS= read -r line; do
+            if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//|\*|""")'; then
+              stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*(#|//|\*|""")[[:space:]]?@@')
+              if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
+                flagged="$flagged\n  - $f: $stripped"
+              fi
+              if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//)'; then
+                block_len=$((block_len + 1))
+              else
+                block_len=0
+              fi
+            else
+              [ "$block_len" -gt 5 ] && flagged="$flagged\n  - $f: oversized comment block ($block_len lines)"
+              block_len=0
+            fi
+          done < "$f"
+          [ "$block_len" -gt 5 ] && flagged="$flagged\n  - $f: oversized comment block ($block_len lines, end of file)"
+        done
+        if [ -n "$flagged" ]; then
+          echo "⚠ comment hygiene (commit still proceeds):"
+          printf '%b\n' "$flagged"
+        fi
+        exit 0
+
 commit-msg:
   commands:
     conventional:
@@ -896,6 +931,41 @@ pre-commit:
           printf '%s\n' "$missing"
         fi
         exit 0
+    comment-hygiene:
+      # Warn-only (never blocks): flags change-narration comments and oversized comment
+      # blocks. Patterns come from .claude/comment-hygiene-patterns.txt (see comments.md).
+      run: |
+        patterns=".claude/comment-hygiene-patterns.txt"
+        [ -f "$patterns" ] || exit 0
+        flagged=""
+        for f in $(git diff --cached --name-only); do
+          case "$f" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.py) ;; *) continue ;; esac
+          [ -f "$f" ] || continue
+          block_len=0
+          while IFS= read -r line; do
+            if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//|\*|""")'; then
+              stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*(#|//|\*|""")[[:space:]]?@@')
+              if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
+                flagged="$flagged\n  - $f: $stripped"
+              fi
+              if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//)'; then
+                block_len=$((block_len + 1))
+              else
+                block_len=0
+              fi
+            else
+              [ "$block_len" -gt 5 ] && flagged="$flagged\n  - $f: oversized comment block ($block_len lines)"
+              block_len=0
+            fi
+          done < "$f"
+          [ "$block_len" -gt 5 ] && flagged="$flagged\n  - $f: oversized comment block ($block_len lines, end of file)"
+        done
+        if [ -n "$flagged" ]; then
+          echo "⚠ comment hygiene (commit still proceeds):"
+          printf '%b\n' "$flagged"
+        fi
+        exit 0
+
 commit-msg:
   commands:
     conventional:
