@@ -1110,9 +1110,40 @@ jobs:
             echo "Update the listed README.md files, or apply the 'skip-readme-check' label to bypass."
             exit 1
           fi
+  comment-hygiene:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with: { fetch-depth: 0 }
+      - name: Require no change-narration comments (apply 'skip-comment-check' label to bypass)
+        env: { LABELS: "${{ join(github.event.pull_request.labels.*.name, ' ') }}" }
+        run: |
+          patterns=".claude/comment-hygiene-patterns.txt"
+          base="origin/${{ github.base_ref }}"
+          flagged=""
+          for f in $(git diff --name-only "$base"...HEAD); do
+            case "$f" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.py) ;; *) continue ;; esac
+            [ -f "$f" ] || continue
+            while IFS= read -r line; do
+              if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//|\*|""")'; then
+                stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*(#|//|\*|""")[[:space:]]?@@')
+                if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
+                  flagged="$flagged\n  - $f: $stripped"
+                fi
+              fi
+            done < "$f"
+          done
+          if [ -n "$flagged" ]; then
+            echo " $LABELS " | grep -q ' skip-comment-check ' && { echo "skip-comment-check label present — OK"; exit 0; }
+            echo "::error::Change-narration comments found (see list below)"
+            printf '%b\n' "$flagged"
+            echo "State WHAT the code does now, not what changed, or apply the 'skip-comment-check' label to bypass."
+            exit 1
+          fi
 ```
 
-**`.github/workflows/ci.yml`** — FastAPI (swap the `quality` job; the `changelog` job and the README-freshness gate are identical):
+**`.github/workflows/ci.yml`** — FastAPI (swap the `quality` job; the `changelog`, `readme-freshness`, and `comment-hygiene` jobs are identical):
 ```yaml
   quality:
     runs-on: ubuntu-latest
