@@ -66,6 +66,10 @@ Create `.claude/settings.json` at the project root, plus the `.claude/hooks/` sc
         "hooks": [{ "type": "command", "command": "bash .claude/hooks/post-edit-typecheck.sh" }]
       },
       {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": "bash .claude/hooks/post-edit-comment-check.sh" }]
+      },
+      {
         "matcher": "Skill__.*",
         "hooks": [{ "type": "command", "command": "bash .claude/hooks/skill-usage-log.sh" }]
       }
@@ -130,6 +134,10 @@ Create `.claude/settings.json` at the project root, plus the `.claude/hooks/` sc
         "hooks": [{ "type": "command", "command": "bash .claude/hooks/post-edit-typecheck.sh" }]
       },
       {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": "bash .claude/hooks/post-edit-comment-check.sh" }]
+      },
+      {
         "matcher": "Skill__.*",
         "hooks": [{ "type": "command", "command": "bash .claude/hooks/skill-usage-log.sh" }]
       }
@@ -176,6 +184,7 @@ Hook logic lives in `.claude/hooks/` scripts (seeded below) so complex guards st
 - `block-no-verify.sh` (PreToolUse Bash) — blocks `git commit --no-verify` and equivalent hook-layer bypasses (`LEFTHOOK=0`/`LEFTHOOK_EXCLUDE`, `git -c core.hooksPath=…`), direct commits/force-push to protected branches (`main`/`uat`/`develop`), `git checkout`/`restore` that would discard guard-layer files (`.claude/`, `lefthook.yml`, `.github/`, etc.), and `rm -rf` on source dirs.
 - `user-prompt-guard` (UserPromptSubmit) — blocks prompt-injection phrases (OWASP LLM01) and inline credentials (LLM02: AWS/GitHub/Anthropic keys, PEM blocks, DB URLs). FastAPI: `.py` / TS stacks: `.cjs`.
 - `post-edit-typecheck.sh` (PostToolUse) — incremental type feedback, filtered to source-file edits in-script. Feedback-only; exit 0 always. See delta table for typecheck command.
+- `post-edit-comment-check.sh` (PostToolUse) — flags change-narration comments and oversized comment blocks, filtered to source-file edits in-script; patterns come from `.claude/comment-hygiene-patterns.txt`. Feedback-only; exit 0 always.
 - `skill-usage-log.sh` (PostToolUse `Skill__.*`) — silently logs each skill invocation to `.claude/skill-usage.log` (gitignored, per-developer). Feeds `/skill-audit`, which surfaces repeated workflows worth capturing as a committed project skill. Never blocks (exit 0 always).
 - `post-tool-failure.sh` (PostToolUseFailure) — surfaces tool error context for self-correction.
 - `stop-checks.sh` (Stop) — runs the test suite; exit 2 forces a fix before the turn ends. See delta table for test command.
@@ -530,6 +539,105 @@ python -m pyright --version >/dev/null 2>&1 || exit 0
 python -m pyright src/ 2>&1 | tail -5
 exit 0
 ```
+
+---
+
+**`.claude/hooks/post-edit-comment-check.sh`** (comment scanner — patterns from `.claude/comment-hygiene-patterns.txt`):
+
+**For TS stacks — uses `node` for JSON parsing:**
+```bash
+#!/usr/bin/env bash
+# PostToolUse(Edit|Write) — flags change-narration comments and oversized comment blocks.
+# Feedback-only (never blocks). Patterns come from .claude/comment-hygiene-patterns.txt.
+input=$(cat)
+file=$(printf '%s' "$input" | node -e "let b='';process.stdin.on('data',c=>b+=c);process.stdin.on('end',()=>{try{const ti=(JSON.parse(b||'{}').tool_input)||{};process.stdout.write(ti.file_path||ti.path||'')}catch(e){process.stdout.write('')}})" 2>/dev/null)
+case "$file" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs) ;; *) exit 0 ;; esac
+[ -f "$file" ] || exit 0
+
+patterns=".claude/comment-hygiene-patterns.txt"
+[ -f "$patterns" ] || exit 0
+
+flagged=""
+block_len=0
+while IFS= read -r line; do
+  if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|//|\*)'; then
+    stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*(#|//|\*)[[:space:]]?@@')
+    if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
+      flagged="$flagged
+  - narration: $stripped"
+    fi
+    if printf '%s' "$line" | grep -qE '^[[:space:]]*//'; then
+      block_len=$((block_len + 1))
+    else
+      block_len=0
+    fi
+  else
+    if [ "$block_len" -gt 5 ]; then
+      flagged="$flagged
+  - oversized comment block ($block_len lines)"
+    fi
+    block_len=0
+  fi
+done < "$file"
+[ "$block_len" -gt 5 ] && flagged="$flagged
+  - oversized comment block ($block_len lines, end of file)"
+
+if [ -n "$flagged" ]; then
+  echo "⚠ comment hygiene (feedback-only):$flagged"
+fi
+exit 0
+```
+
+**For FastAPI — uses `python3` for JSON parsing:**
+```bash
+#!/usr/bin/env bash
+# PostToolUse(Edit|Write) — flags change-narration comments and oversized comment blocks.
+# Feedback-only (never blocks). Patterns come from .claude/comment-hygiene-patterns.txt.
+input=$(cat)
+file=$(printf '%s' "$input" | python3 -c "import json,sys
+try:
+    ti=json.load(sys.stdin).get('tool_input') or {}
+    print(ti.get('file_path') or ti.get('path') or '')
+except Exception:
+    print('')" 2>/dev/null)
+case "$file" in *.py) ;; *) exit 0 ;; esac
+[ -f "$file" ] || exit 0
+
+patterns=".claude/comment-hygiene-patterns.txt"
+[ -f "$patterns" ] || exit 0
+
+flagged=""
+block_len=0
+while IFS= read -r line; do
+  if printf '%s' "$line" | grep -qE '^[[:space:]]*(#|""")'; then
+    stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*(#|""")[[:space:]]?@@')
+    if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
+      flagged="$flagged
+  - narration: $stripped"
+    fi
+    if printf '%s' "$line" | grep -qE '^[[:space:]]*#'; then
+      block_len=$((block_len + 1))
+    else
+      block_len=0
+    fi
+  else
+    if [ "$block_len" -gt 5 ]; then
+      flagged="$flagged
+  - oversized comment block ($block_len lines)"
+    fi
+    block_len=0
+  fi
+done < "$file"
+[ "$block_len" -gt 5 ] && flagged="$flagged
+  - oversized comment block ($block_len lines, end of file)"
+
+if [ -n "$flagged" ]; then
+  echo "⚠ comment hygiene (feedback-only):$flagged"
+fi
+exit 0
+```
+
+**Scoping note:** narration scanning covers plain `#`/`//` lines and the opening line of a `"""`/`/** ` doc-comment block (the common single-line case, e.g. `"""Refactored to support X."""`). Deep multi-line docstring *body* scanning (continuation lines with no per-line marker) is out of scope for this pass.
 
 ---
 
