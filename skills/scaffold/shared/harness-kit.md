@@ -873,6 +873,7 @@ pre-commit:
       run: |
         patterns=".claude/comment-hygiene-patterns.txt"
         [ -f "$patterns" ] || exit 0
+        nl=$(printf '\nx'); nl=${nl%x}
         flagged=""
         for f in $(git diff --cached --name-only); do
           case "$f" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.py) ;; *) continue ;; esac
@@ -885,27 +886,23 @@ pre-commit:
             lineno="${cline%%:*}"
             content="${cline#*:}"
             if [ "$prev_lineno" -ne 0 ] && [ "$lineno" -ne $((prev_lineno + 1)) ]; then
-              [ "$block_len" -gt 5 ] && flagged="$flagged
-  - $f: oversized comment block ($block_len lines)"
+              [ "$block_len" -gt 5 ] && flagged="$flagged$nl  - $f: oversized comment block ($block_len lines)"
               block_len=0
             fi
             stripped=$(printf '%s' "$content" | sed -E 's@^[[:space:]]*(#|//|\*|"""|/\*\*?)[[:space:]]?@@')
             if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
-              flagged="$flagged
-  - $f: $stripped"
+              flagged="$flagged$nl  - $f: $stripped"
             fi
             if printf '%s' "$content" | grep -qE '^[[:space:]]*(#|//)'; then
               block_len=$((block_len + 1))
             else
-              [ "$block_len" -gt 5 ] && flagged="$flagged
-  - $f: oversized comment block ($block_len lines)"
+              [ "$block_len" -gt 5 ] && flagged="$flagged$nl  - $f: oversized comment block ($block_len lines)"
               block_len=0
             fi
             prev_lineno="$lineno"
           done < "$candidates"
           rm -f "$candidates"
-          [ "$block_len" -gt 5 ] && flagged="$flagged
-  - $f: oversized comment block ($block_len lines, end of file)"
+          [ "$block_len" -gt 5 ] && flagged="$flagged$nl  - $f: oversized comment block ($block_len lines, end of file)"
         done
         if [ -n "$flagged" ]; then
           echo "⚠ comment hygiene (commit still proceeds):"
@@ -976,6 +973,7 @@ pre-commit:
       run: |
         patterns=".claude/comment-hygiene-patterns.txt"
         [ -f "$patterns" ] || exit 0
+        nl=$(printf '\nx'); nl=${nl%x}
         flagged=""
         for f in $(git diff --cached --name-only); do
           case "$f" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.py) ;; *) continue ;; esac
@@ -988,27 +986,23 @@ pre-commit:
             lineno="${cline%%:*}"
             content="${cline#*:}"
             if [ "$prev_lineno" -ne 0 ] && [ "$lineno" -ne $((prev_lineno + 1)) ]; then
-              [ "$block_len" -gt 5 ] && flagged="$flagged
-  - $f: oversized comment block ($block_len lines)"
+              [ "$block_len" -gt 5 ] && flagged="$flagged$nl  - $f: oversized comment block ($block_len lines)"
               block_len=0
             fi
             stripped=$(printf '%s' "$content" | sed -E 's@^[[:space:]]*(#|//|\*|"""|/\*\*?)[[:space:]]?@@')
             if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
-              flagged="$flagged
-  - $f: $stripped"
+              flagged="$flagged$nl  - $f: $stripped"
             fi
             if printf '%s' "$content" | grep -qE '^[[:space:]]*(#|//)'; then
               block_len=$((block_len + 1))
             else
-              [ "$block_len" -gt 5 ] && flagged="$flagged
-  - $f: oversized comment block ($block_len lines)"
+              [ "$block_len" -gt 5 ] && flagged="$flagged$nl  - $f: oversized comment block ($block_len lines)"
               block_len=0
             fi
             prev_lineno="$lineno"
           done < "$candidates"
           rm -f "$candidates"
-          [ "$block_len" -gt 5 ] && flagged="$flagged
-  - $f: oversized comment block ($block_len lines, end of file)"
+          [ "$block_len" -gt 5 ] && flagged="$flagged$nl  - $f: oversized comment block ($block_len lines, end of file)"
         done
         if [ -n "$flagged" ]; then
           echo "⚠ comment hygiene (commit still proceeds):"
@@ -1174,6 +1168,7 @@ jobs:
           [ -f "$patterns" ] || { echo "::error::comment-hygiene pattern list missing (.claude/comment-hygiene-patterns.txt)"; exit 1; }
           strict_patterns=$(mktemp)
           head -n 10 "$patterns" > "$strict_patterns"
+          nl=$(printf '\nx'); nl=${nl%x}
           flagged=""
           for f in $(git diff --name-only "$base"...HEAD); do
             case "$f" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.py) ;; *) continue ;; esac
@@ -1181,8 +1176,7 @@ jobs:
             while IFS= read -r content; do
               stripped=$(printf '%s' "$content" | sed -E 's@^[[:space:]]*(#|//|\*|"""|/\*\*?)[[:space:]]?@@')
               if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$strict_patterns"; then
-                flagged="$flagged
-  - $f: $stripped"
+                flagged="$flagged$nl  - $f: $stripped"
               fi
             done < <(git diff -U0 "$base"...HEAD -- "$f" | grep '^+' | grep -vE '^\+\+\+' | sed 's/^+//' | grep -E '^[[:space:]]*(#|//|\*|"""|/\*\*?)')
           done

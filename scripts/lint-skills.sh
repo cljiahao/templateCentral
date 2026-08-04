@@ -840,6 +840,52 @@ check_migrate_hook_inventory_matches_kit() {
   fi
 }
 
+check_yaml_fences_parse() {
+  # A seeded lefthook.yml/ci.yml is authored as a ```yaml fence in prose docs — nothing else
+  # ever parses it before it reaches a real project. A shell variable assignment that spans
+  # physical lines inside a `run: |` block scalar silently breaks YAML indentation rules
+  # without any syntax error in the shell itself, so this must parse the fence content, not
+  # just lint the shell inside it. TIMELESS: catches this bug class regardless of cause.
+  header "Seeded \`\`\`yaml fences parse as valid YAML"
+  if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import yaml' >/dev/null 2>&1; then
+    pass "skipped (python3/PyYAML not available)"
+    return
+  fi
+  local out
+  out=$(python3 - "$SKILLS_DIR" <<'PY'
+import os, sys, yaml
+root = sys.argv[1]
+bad = []
+for dp, _, fs in os.walk(root):
+    for f in fs:
+        if not f.endswith('.md'): continue
+        p = os.path.join(dp, f)
+        lines = open(p, encoding='utf-8').read().split('\n')
+        i = 0
+        while i < len(lines):
+            if lines[i].strip() == '```yaml':
+                start = i + 1
+                j = start
+                while j < len(lines) and lines[j].strip() != '```':
+                    j += 1
+                try:
+                    list(yaml.safe_load_all('\n'.join(lines[start:j])))
+                except Exception as e:
+                    bad.append(f"{p}:{start+1}-{j}: {str(e).splitlines()[0]}")
+                i = j + 1
+            else:
+                i += 1
+for b in bad: print(b)
+PY
+)
+  if [[ -n "$out" ]]; then
+    echo "$out"
+    fail "Seeded yaml fence(s) fail to parse — check block-scalar (run: |) indentation"
+  else
+    pass "All seeded yaml fences parse"
+  fi
+}
+
 check_no_absolute_plugin_path() {
   # References load via the <skill-dir> placeholder (the tool-provided skill directory at invocation),
   # never an absolute install path, and never ${CLAUDE_SKILL_DIR} (empty in agent-run bash — only
@@ -1050,6 +1096,7 @@ check_seeded_skill_paths_are_directories
 check_no_toplevel_command_in_hooks
 check_scaffold_seeds_complete_harness
 check_migrate_hook_inventory_matches_kit
+check_yaml_fences_parse
 check_no_absolute_plugin_path
 check_skilldir_refs_resolve
 check_ref_header_prereq_suffix
