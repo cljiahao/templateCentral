@@ -97,6 +97,59 @@ check_no_hardcoded_secrets() {
   fi
 }
 
+check_no_comment_narration() {
+  # Change-narration comments ("was X, now Y", "MOVED to...", version refs) are short-lived
+  # by definition and rot the moment the described change is no longer recent — the same
+  # doctrine seeded into every scaffolded project via comments.md. Applies here too:
+  # scripts/*.sh (this repo's own implementation) and bash code fences embedded in skill
+  # markdown (the seed content that ships into every scaffolded hook/lefthook/CI snippet).
+  header "Change-narration comments"
+  local patterns="skills/scaffold/shared/comment-hygiene-patterns.txt"
+  if [[ ! -f "$patterns" ]]; then
+    fail "Missing $patterns"
+    return
+  fi
+  local matches="" f line stripped md_file in_bash
+
+  for f in scripts/*.sh; do
+    [[ -f "$f" ]] || continue
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^[[:space:]]*# ]]; then
+        stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*#[[:space:]]?@@')
+        if [[ -n "$stripped" ]] && grep -qEf "$patterns" <<< "$stripped"; then
+          matches="$matches
+$f: $stripped"
+        fi
+      fi
+    done < "$f"
+  done
+
+  while IFS= read -r -d '' md_file; do
+    in_bash=0
+    while IFS= read -r line; do
+      case "$line" in
+        '```bash') in_bash=1; continue ;;
+        '```') in_bash=0; continue ;;
+      esac
+      [[ "$in_bash" -eq 1 ]] || continue
+      if [[ "$line" =~ ^[[:space:]]*# ]]; then
+        stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*#[[:space:]]?@@')
+        if [[ -n "$stripped" ]] && grep -qEf "$patterns" <<< "$stripped"; then
+          matches="$matches
+$md_file: $stripped"
+        fi
+      fi
+    done < "$md_file"
+  done < <(find "$SKILLS_DIR" -name '*.md' -print0)
+
+  if [[ -n "$matches" ]]; then
+    echo "$matches"
+    fail "Change-narration comments found — state WHAT the code does now, not what changed"
+  else
+    pass "No change-narration comments"
+  fi
+}
+
 check_no_ghost_agent_names() {
   # Ghost agent / skill names that must never appear as invocations in skill files.
   #
@@ -115,10 +168,9 @@ check_no_ghost_agent_names() {
   #   invoked as skills. The correct form is: cat "$HOME/.claude/plugins/marketplaces/templatecentral/skills/<name>/SKILL.md"
   #   Use compact table form: `<name> utility (cat skills/<name>/SKILL.md via plugin root)`
   #
-  # MOVED to repo-internal project skills (v5.1.0):
-  #   templatecentral:audit → /tc-audit, templatecentral:write-skill → /tc-write-skill
-  #   These live in .claude/skills/ (not shipped to installed projects). A plugin-namespaced
-  #   reference (templatecentral:audit / :write-skill) inside shipped skills/ is now a ghost.
+  # Repo-internal project skills (not shipped to installed projects, live in .claude/skills/):
+  #   templatecentral:audit and templatecentral:write-skill are not valid references from
+  #   shipped skills/ — the correct forms are /tc-audit and /tc-write-skill.
   #
   # Still LEGITIMATE (shipped registered skills): templatecentral:scaffold, :add, :migrate, :standards
   # (these are registered skills with `name:` frontmatter and resolve correctly).
@@ -950,6 +1002,7 @@ check_no_cve_identifiers
 check_no_jurisdiction_specific
 check_no_hardcoded_secrets
 check_no_ghost_agent_names
+check_no_comment_narration
 check_owasp_llm_sections_complete
 check_skillmd_description_length
 check_ref_file_headers
