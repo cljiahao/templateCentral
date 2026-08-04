@@ -875,6 +875,8 @@ pre-commit:
           [ -f "$f" ] || continue
           block_len=0
           prev_lineno=0
+          candidates=$(mktemp)
+          grep -nE '^[[:space:]]*(#|//|\*|"""|/\*\*?)' "$f" > "$candidates"
           while IFS= read -r cline; do
             lineno="${cline%%:*}"
             content="${cline#*:}"
@@ -893,7 +895,8 @@ pre-commit:
               block_len=0
             fi
             prev_lineno="$lineno"
-          done < <(grep -nE '^[[:space:]]*(#|//|\*|"""|/\*\*?)' "$f")
+          done < "$candidates"
+          rm -f "$candidates"
           [ "$block_len" -gt 5 ] && flagged="$flagged\n  - $f: oversized comment block ($block_len lines, end of file)"
         done
         if [ -n "$flagged" ]; then
@@ -971,6 +974,8 @@ pre-commit:
           [ -f "$f" ] || continue
           block_len=0
           prev_lineno=0
+          candidates=$(mktemp)
+          grep -nE '^[[:space:]]*(#|//|\*|"""|/\*\*?)' "$f" > "$candidates"
           while IFS= read -r cline; do
             lineno="${cline%%:*}"
             content="${cline#*:}"
@@ -989,7 +994,8 @@ pre-commit:
               block_len=0
             fi
             prev_lineno="$lineno"
-          done < <(grep -nE '^[[:space:]]*(#|//|\*|"""|/\*\*?)' "$f")
+          done < "$candidates"
+          rm -f "$candidates"
           [ "$block_len" -gt 5 ] && flagged="$flagged\n  - $f: oversized comment block ($block_len lines, end of file)"
         done
         if [ -n "$flagged" ]; then
@@ -1154,6 +1160,8 @@ jobs:
           patterns=".claude/comment-hygiene-patterns.txt"
           base="origin/${{ github.base_ref }}"
           [ -f "$patterns" ] || { echo "::error::comment-hygiene pattern list missing (.claude/comment-hygiene-patterns.txt)"; exit 1; }
+          strict_patterns=$(mktemp)
+          head -n 10 "$patterns" > "$strict_patterns"
           flagged=""
           for f in $(git diff --name-only "$base"...HEAD); do
             case "$f" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.py) ;; *) continue ;; esac
@@ -1161,11 +1169,12 @@ jobs:
             while IFS= read -r cline; do
               content="${cline#*:}"
               stripped=$(printf '%s' "$content" | sed -E 's@^[[:space:]]*(#|//|\*|"""|/\*\*?)[[:space:]]?@@')
-              if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf <(head -n 10 "$patterns"); then
+              if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$strict_patterns"; then
                 flagged="$flagged\n  - $f: $stripped"
               fi
             done < <(grep -nE '^[[:space:]]*(#|//|\*|"""|/\*\*?)' "$f")
           done
+          rm -f "$strict_patterns"
           if [ -n "$flagged" ]; then
             echo " $LABELS " | grep -q ' skip-comment-check ' && { echo "skip-comment-check label present — OK"; exit 0; }
             echo "::error::Change-narration comments found (see list below)"
