@@ -24,3 +24,16 @@ Tenets 1, 3, 4, 5 are near-universal (PEP 8, Google/Airbnb style guides, Ruff `E
 - **TypeScript (Next.js, NestJS, Vite+React):** `no-inline-comments: 'error'` (with an `ignorePattern` for `eslint-`/`@ts-`/`prettier-`/coverage directives) plus `sonarjs/no-commented-code: 'error'` in `eslint.config.*` — a hard gate that fails lint/CI, enforcing tenet 2 (own-line comments) and tenet 3 (no commented-out code).
 - **FastAPI (Python):** Ruff `ERA` rule family enabled in `pyproject.toml` — deterministically flags commented-out code (tenet 3), dependency-free.
 - **All stacks:** tenets 1, 4, 5 are judgment calls — the `templatecentral:standards (code-standards)` review pass and the seeded `AGENTS.md` rule are the enforcement surface a linter cannot cover.
+
+### Mechanical enforcement — change-narration + oversized blocks
+
+Tenets 1 and 5 stay judgment calls — no linter can reliably tell WHY from WHAT, or judge whether a docstring documents its contract well. Tenet 4 (no change-narration) is different: it's a keyword/pattern match, not a semantic judgment, so it gets real mechanical enforcement.
+
+**Canonical pattern list:** `skills/scaffold/shared/comment-hygiene-patterns.txt` in templateCentral's own repo (scaffolded projects get it copied to `.claude/comment-hygiene-patterns.txt`). This is the only authored copy — every enforcement surface (a PostToolUse hook, a lefthook command, a CI job) reads it at runtime rather than hardcoding its own regex.
+
+- **Change-narration keywords** (`was`, `added`, `removed`, `changed`, `updated`, `renamed`, `moved`, `refactored`, `per review`, `as requested`) are anchored to comment-start to minimize false positives. They apply to every comment form — plain `#`/`//` lines and structured doc-comment blocks (`/** */`, `"""..."""`) alike. A "short-lived" narration problem doesn't stop being one just because it's sitting in a docstring instead of a line comment.
+- **Date and ticket/issue-reference patterns** (`YYYY-MM-DD`, `ABC-123`, `#1234`) are lower-precision — a real ticket code and a legitimate technical term (`ABC-123` vs. `UTF-8`, `SHA-256`, `RFC-7231`) can be structurally identical, and anchoring doesn't help when the collision is the comment's very first word. They stay active in the two warn-only tiers as an advisory signal, but are excluded from the CI hard gate — a blocking check can't carry that false-positive rate.
+- **Comment-block length** (a run of plain `#`/`//` lines exceeding 5 lines) is flagged as likely non-concise — advisory only, never a CI failure, and never applied to structured doc-comment blocks (those are tenet 5's territory, expected to run longer).
+- **Three enforcement tiers**, all warn-only except the last: a live PostToolUse hook (feedback the instant a file is edited), a warn-only lefthook command (a backstop at `git commit`), and a hard CI gate on the PR diff (bypassable via a `skip-comment-check` label) — this last one only fires on the 10 high-precision keyword patterns, never on the length heuristic or the 3 lower-precision date/ticket/issue patterns.
+
+**Secrets in comments** are covered by the existing gitleaks pre-commit + CI scan (`lefthook.yml`'s `secret-scan` command, `.github/workflows/ci.yml`'s "Secret scan (full history)" step) — those scan entire file text, comments included, so no separate mechanism exists here.

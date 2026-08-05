@@ -66,6 +66,10 @@ Create `.claude/settings.json` at the project root, plus the `.claude/hooks/` sc
         "hooks": [{ "type": "command", "command": "bash .claude/hooks/post-edit-typecheck.sh" }]
       },
       {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": "bash .claude/hooks/post-edit-comment-check.sh" }]
+      },
+      {
         "matcher": "Skill__.*",
         "hooks": [{ "type": "command", "command": "bash .claude/hooks/skill-usage-log.sh" }]
       }
@@ -130,6 +134,10 @@ Create `.claude/settings.json` at the project root, plus the `.claude/hooks/` sc
         "hooks": [{ "type": "command", "command": "bash .claude/hooks/post-edit-typecheck.sh" }]
       },
       {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": "bash .claude/hooks/post-edit-comment-check.sh" }]
+      },
+      {
         "matcher": "Skill__.*",
         "hooks": [{ "type": "command", "command": "bash .claude/hooks/skill-usage-log.sh" }]
       }
@@ -176,6 +184,7 @@ Hook logic lives in `.claude/hooks/` scripts (seeded below) so complex guards st
 - `block-no-verify.sh` (PreToolUse Bash) — blocks `git commit --no-verify` and equivalent hook-layer bypasses (`LEFTHOOK=0`/`LEFTHOOK_EXCLUDE`, `git -c core.hooksPath=…`), direct commits/force-push to protected branches (`main`/`uat`/`develop`), `git checkout`/`restore` that would discard guard-layer files (`.claude/`, `lefthook.yml`, `.github/`, etc.), and `rm -rf` on source dirs.
 - `user-prompt-guard` (UserPromptSubmit) — blocks prompt-injection phrases (OWASP LLM01) and inline credentials (LLM02: AWS/GitHub/Anthropic keys, PEM blocks, DB URLs). FastAPI: `.py` / TS stacks: `.cjs`.
 - `post-edit-typecheck.sh` (PostToolUse) — incremental type feedback, filtered to source-file edits in-script. Feedback-only; exit 0 always. See delta table for typecheck command.
+- `post-edit-comment-check.sh` (PostToolUse) — flags change-narration comments and oversized comment blocks, filtered to source-file edits in-script; patterns come from `.claude/comment-hygiene-patterns.txt`. Feedback-only; exit 0 always.
 - `skill-usage-log.sh` (PostToolUse `Skill__.*`) — silently logs each skill invocation to `.claude/skill-usage.log` (gitignored, per-developer). Feeds `/skill-audit`, which surfaces repeated workflows worth capturing as a committed project skill. Never blocks (exit 0 always).
 - `post-tool-failure.sh` (PostToolUseFailure) — surfaces tool error context for self-correction.
 - `stop-checks.sh` (Stop) — runs the test suite; exit 2 forces a fix before the turn ends. See delta table for test command.
@@ -233,6 +242,7 @@ case "$rel" in
   .claude/.harness-base/*|*/.claude/.harness-base/*) reason="merge base snapshot — editing it can poison harness re-sync merges" ;;
   Dockerfile|*/Dockerfile) reason="container image definition" ;;
   lefthook.yml|*/lefthook.yml|.gitleaks.toml|*/.gitleaks.toml) reason="git-hook enforcement config — editing it can weaken commit-time guards" ;;
+  .claude/comment-hygiene-patterns.txt|*/.claude/comment-hygiene-patterns.txt) reason="comment-hygiene enforcement pattern list — editing it can silently weaken the CI hard gate" ;;
   .lefthook/*|*/.lefthook/*) reason="git-hook script — editing it can weaken commit-time guards" ;;
 esac
 if [ -n "$reason" ]; then
@@ -294,6 +304,7 @@ case "$rel" in
   .claude/.harness-base/*|*/.claude/.harness-base/*) reason="merge base snapshot — editing it can poison harness re-sync merges" ;;
   Dockerfile|*/Dockerfile) reason="container image definition" ;;
   lefthook.yml|*/lefthook.yml|.gitleaks.toml|*/.gitleaks.toml) reason="git-hook enforcement config — editing it can weaken commit-time guards" ;;
+  .claude/comment-hygiene-patterns.txt|*/.claude/comment-hygiene-patterns.txt) reason="comment-hygiene enforcement pattern list — editing it can silently weaken the CI hard gate" ;;
   .lefthook/*|*/.lefthook/*) reason="git-hook script — editing it can weaken commit-time guards" ;;
 esac
 if [ -n "$reason" ]; then
@@ -531,6 +542,133 @@ exit 0
 
 ---
 
+**`.claude/hooks/post-edit-comment-check.sh`** (comment scanner — patterns from `.claude/comment-hygiene-patterns.txt`):
+
+**For TS stacks — uses `node` for JSON parsing:**
+```bash
+#!/usr/bin/env bash
+# PostToolUse(Edit|Write) — flags change-narration comments and oversized comment blocks.
+# Feedback-only (never blocks). Patterns come from .claude/comment-hygiene-patterns.txt.
+input=$(cat)
+file=$(printf '%s' "$input" | node -e "let b='';process.stdin.on('data',c=>b+=c);process.stdin.on('end',()=>{try{const ti=(JSON.parse(b||'{}').tool_input)||{};process.stdout.write(ti.file_path||ti.path||'')}catch(e){process.stdout.write('')}})" 2>/dev/null)
+case "$file" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs) ;; *) exit 0 ;; esac
+[ -f "$file" ] || exit 0
+
+patterns=".claude/comment-hygiene-patterns.txt"
+[ -f "$patterns" ] || exit 0
+
+flagged=""
+block_len=0
+prev_lineno=0
+while IFS= read -r cline; do
+  lineno="${cline%%:*}"
+  content="${cline#*:}"
+  if [ "$prev_lineno" -ne 0 ] && [ "$lineno" -ne $((prev_lineno + 1)) ]; then
+    [ "$block_len" -gt 5 ] && flagged="$flagged
+  - oversized comment block ($block_len lines)"
+    block_len=0
+  fi
+  stripped=$(printf '%s' "$content" | sed -E 's@^[[:space:]]*(#|//|\*|/\*\*?)[[:space:]]?@@')
+  if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
+    flagged="$flagged
+  - narration: $stripped"
+  fi
+  if printf '%s' "$content" | grep -qE '^[[:space:]]*//'; then
+    block_len=$((block_len + 1))
+  else
+    [ "$block_len" -gt 5 ] && flagged="$flagged
+  - oversized comment block ($block_len lines)"
+    block_len=0
+  fi
+  prev_lineno="$lineno"
+done < <(grep -nE '^[[:space:]]*(#|//|\*|/\*\*?)' "$file")
+[ "$block_len" -gt 5 ] && flagged="$flagged
+  - oversized comment block ($block_len lines, end of file)"
+
+if [ -n "$flagged" ]; then
+  msg="⚠ comment hygiene:$flagged"
+  node -e "process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:'PostToolUse',additionalContext:process.argv[1]}}))" "$msg"
+fi
+exit 0
+```
+
+**For FastAPI — uses `python3` for JSON parsing:**
+```bash
+#!/usr/bin/env bash
+# PostToolUse(Edit|Write) — flags change-narration comments and oversized comment blocks.
+# Feedback-only (never blocks). Patterns come from .claude/comment-hygiene-patterns.txt.
+input=$(cat)
+file=$(printf '%s' "$input" | python3 -c "import json,sys
+try:
+    ti=json.load(sys.stdin).get('tool_input') or {}
+    print(ti.get('file_path') or ti.get('path') or '')
+except Exception:
+    print('')" 2>/dev/null)
+case "$file" in *.py) ;; *) exit 0 ;; esac
+[ -f "$file" ] || exit 0
+
+patterns=".claude/comment-hygiene-patterns.txt"
+[ -f "$patterns" ] || exit 0
+
+flagged=""
+block_len=0
+prev_lineno=0
+while IFS= read -r cline; do
+  lineno="${cline%%:*}"
+  content="${cline#*:}"
+  if [ "$prev_lineno" -ne 0 ] && [ "$lineno" -ne $((prev_lineno + 1)) ]; then
+    [ "$block_len" -gt 5 ] && flagged="$flagged
+  - oversized comment block ($block_len lines)"
+    block_len=0
+  fi
+  stripped=$(printf '%s' "$content" | sed -E 's@^[[:space:]]*(#|""")[[:space:]]?@@')
+  if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
+    flagged="$flagged
+  - narration: $stripped"
+  fi
+  if printf '%s' "$content" | grep -qE '^[[:space:]]*#'; then
+    block_len=$((block_len + 1))
+  else
+    [ "$block_len" -gt 5 ] && flagged="$flagged
+  - oversized comment block ($block_len lines)"
+    block_len=0
+  fi
+  prev_lineno="$lineno"
+done < <(grep -nE '^[[:space:]]*(#|""")' "$file")
+[ "$block_len" -gt 5 ] && flagged="$flagged
+  - oversized comment block ($block_len lines, end of file)"
+
+if [ -n "$flagged" ]; then
+  msg="⚠ comment hygiene:$flagged"
+  python3 -c "import json,sys; print(json.dumps({'hookSpecificOutput':{'hookEventName':'PostToolUse','additionalContext':sys.argv[1]}}))" "$msg"
+fi
+exit 0
+```
+
+**Why JSON output, not a plain `echo`:** a `PostToolUse` hook's plain stdout on exit 0 is written to the debug log only — it is never shown to Claude or the user (the exceptions are `UserPromptSubmit`, `UserPromptExpansion`, and `SessionStart`). To actually surface a finding, the hook must emit `hookSpecificOutput.additionalContext`, which Claude Code inserts into the model's context at the point the hook fired — the same mechanism this repo's own `skills/add/redaction` hook already uses. A bare `echo` here would make this entire tier silently inert.
+
+**Scoping note:** narration scanning covers plain `#`/`//` lines and the opening line of a `"""`/`/** ` doc-comment block (the common single-line case, e.g. `"""Refactored to support X."""`). Deep multi-line docstring *body* scanning (continuation lines with no per-line marker) is out of scope for this pass.
+
+**`.claude/comment-hygiene-patterns.txt`** (identical across stacks — the canonical pattern list every comment-hygiene surface above, and the `comment-hygiene` lefthook command and CI job seeded later in this kit, read at runtime instead of hardcoding their own copy):
+```
+^[Ww][Aa][Ss][[:space:]]
+^[Aa][Dd][Dd][Ee][Dd][[:space:]]
+^[Rr][Ee][Mm][Oo][Vv][Ee][Dd][[:space:]]
+^[Cc][Hh][Aa][Nn][Gg][Ee][Dd][[:space:]]
+^[Uu][Pp][Dd][Aa][Tt][Ee][Dd][[:space:]]
+^[Rr][Ee][Nn][Aa][Mm][Ee][Dd][[:space:]]
+^[Mm][Oo][Vv][Ee][Dd][[:space:]]
+^[Rr][Ee][Ff][Aa][Cc][Tt][Oo][Rr][Ee][Dd][[:space:]]
+^[Pp][Ee][Rr] [Rr][Ee][Vv][Ii][Ee][Ww]
+^[Aa][Ss] [Rr][Ee][Qq][Uu][Ee][Ss][Tt][Ee][Dd]
+[0-9]{4}-[0-9]{2}-[0-9]{2}
+^[A-Z]{2,}-[0-9]+
+^#[0-9]+
+```
+The first 10 lines are the anchored change-narration keyword patterns (each spells out both cases per letter via bracket expressions — `grep -Ef`/`grep -qEf` is correct everywhere; never `-Eif`, since `-i` combined with the last two patterns would match ordinary lowercase text like `exit-2`). The last 3 lines (date, ticket-reference, issue-reference) are lower-precision — real tickets and legitimate technical terms (`ABC-123` vs. `UTF-8`) can be structurally identical, so the CI hard gate later in this kit reads only the first 10 lines; the two warn-only surfaces read all 13.
+
+---
+
 **`.claude/hooks/post-tool-failure.sh`** (runtime varies for JSON parsing only; logic is identical):
 
 **For TS stacks — uses `node`:**
@@ -729,6 +867,49 @@ pre-commit:
           printf '%s\n' "$missing"
         fi
         exit 0
+    comment-hygiene:
+      # Warn-only (never blocks): flags change-narration comments and oversized comment
+      # blocks. Patterns come from .claude/comment-hygiene-patterns.txt (see comments.md).
+      run: |
+        patterns=".claude/comment-hygiene-patterns.txt"
+        [ -f "$patterns" ] || exit 0
+        nl=$(printf '\nx'); nl=${nl%x}
+        flagged=""
+        for f in $(git diff --cached --name-only); do
+          case "$f" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.py) ;; *) continue ;; esac
+          [ -f "$f" ] || continue
+          block_len=0
+          prev_lineno=0
+          candidates=$(mktemp)
+          grep -nE '^[[:space:]]*(#|//|\*|"""|/\*\*?)' "$f" > "$candidates" || true
+          while IFS= read -r cline; do
+            lineno="${cline%%:*}"
+            content="${cline#*:}"
+            if [ "$prev_lineno" -ne 0 ] && [ "$lineno" -ne $((prev_lineno + 1)) ]; then
+              [ "$block_len" -gt 5 ] && flagged="$flagged$nl  - $f: oversized comment block ($block_len lines)"
+              block_len=0
+            fi
+            stripped=$(printf '%s' "$content" | sed -E 's@^[[:space:]]*(#|//|\*|"""|/\*\*?)[[:space:]]?@@')
+            if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
+              flagged="$flagged$nl  - $f: $stripped"
+            fi
+            if printf '%s' "$content" | grep -qE '^[[:space:]]*(#|//)'; then
+              block_len=$((block_len + 1))
+            else
+              [ "$block_len" -gt 5 ] && flagged="$flagged$nl  - $f: oversized comment block ($block_len lines)"
+              block_len=0
+            fi
+            prev_lineno="$lineno"
+          done < "$candidates"
+          rm -f "$candidates"
+          [ "$block_len" -gt 5 ] && flagged="$flagged$nl  - $f: oversized comment block ($block_len lines, end of file)"
+        done
+        if [ -n "$flagged" ]; then
+          echo "⚠ comment hygiene (commit still proceeds):"
+          printf '%s\n' "$flagged"
+        fi
+        exit 0
+
 commit-msg:
   commands:
     conventional:
@@ -786,6 +967,49 @@ pre-commit:
           printf '%s\n' "$missing"
         fi
         exit 0
+    comment-hygiene:
+      # Warn-only (never blocks): flags change-narration comments and oversized comment
+      # blocks. Patterns come from .claude/comment-hygiene-patterns.txt (see comments.md).
+      run: |
+        patterns=".claude/comment-hygiene-patterns.txt"
+        [ -f "$patterns" ] || exit 0
+        nl=$(printf '\nx'); nl=${nl%x}
+        flagged=""
+        for f in $(git diff --cached --name-only); do
+          case "$f" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.py) ;; *) continue ;; esac
+          [ -f "$f" ] || continue
+          block_len=0
+          prev_lineno=0
+          candidates=$(mktemp)
+          grep -nE '^[[:space:]]*(#|//|\*|"""|/\*\*?)' "$f" > "$candidates" || true
+          while IFS= read -r cline; do
+            lineno="${cline%%:*}"
+            content="${cline#*:}"
+            if [ "$prev_lineno" -ne 0 ] && [ "$lineno" -ne $((prev_lineno + 1)) ]; then
+              [ "$block_len" -gt 5 ] && flagged="$flagged$nl  - $f: oversized comment block ($block_len lines)"
+              block_len=0
+            fi
+            stripped=$(printf '%s' "$content" | sed -E 's@^[[:space:]]*(#|//|\*|"""|/\*\*?)[[:space:]]?@@')
+            if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$patterns"; then
+              flagged="$flagged$nl  - $f: $stripped"
+            fi
+            if printf '%s' "$content" | grep -qE '^[[:space:]]*(#|//)'; then
+              block_len=$((block_len + 1))
+            else
+              [ "$block_len" -gt 5 ] && flagged="$flagged$nl  - $f: oversized comment block ($block_len lines)"
+              block_len=0
+            fi
+            prev_lineno="$lineno"
+          done < "$candidates"
+          rm -f "$candidates"
+          [ "$block_len" -gt 5 ] && flagged="$flagged$nl  - $f: oversized comment block ($block_len lines, end of file)"
+        done
+        if [ -n "$flagged" ]; then
+          echo "⚠ comment hygiene (commit still proceeds):"
+          printf '%s\n' "$flagged"
+        fi
+        exit 0
+
 commit-msg:
   commands:
     conventional:
@@ -930,9 +1154,47 @@ jobs:
             echo "Update the listed README.md files, or apply the 'skip-readme-check' label to bypass."
             exit 1
           fi
+  comment-hygiene:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with: { fetch-depth: 0 }
+      - name: Require no change-narration comments (apply 'skip-comment-check' label to bypass)
+        env: { LABELS: "${{ join(github.event.pull_request.labels.*.name, ' ') }}" }
+        run: |
+          patterns=".claude/comment-hygiene-patterns.txt"
+          base="origin/${{ github.base_ref }}"
+          [ -f "$patterns" ] || { echo "::error::comment-hygiene pattern list missing (.claude/comment-hygiene-patterns.txt)"; exit 1; }
+          strict_patterns=$(mktemp)
+          head -n 10 "$patterns" > "$strict_patterns"
+          nl=$(printf '\nx'); nl=${nl%x}
+          flagged=""
+          for f in $(git diff --name-only "$base"...HEAD); do
+            case "$f" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.py) ;; *) continue ;; esac
+            [ -f "$f" ] || continue
+            while IFS= read -r content; do
+              stripped=$(printf '%s' "$content" | sed -E 's@^[[:space:]]*(#|//|\*|"""|/\*\*?)[[:space:]]?@@')
+              if [ -n "$stripped" ] && printf '%s' "$stripped" | grep -qEf "$strict_patterns"; then
+                flagged="$flagged$nl  - $f: $stripped"
+              fi
+            done < <(git diff -U0 "$base"...HEAD -- "$f" | grep '^+' | grep -vE '^\+\+\+' | sed 's/^+//' | grep -E '^[[:space:]]*(#|//|\*|"""|/\*\*?)')
+          done
+          rm -f "$strict_patterns"
+          if [ -n "$flagged" ]; then
+            echo " $LABELS " | grep -q ' skip-comment-check ' && { echo "skip-comment-check label present — OK"; exit 0; }
+            echo "::error::Change-narration comments found (see list below)"
+            printf '%s\n' "$flagged"
+            echo "State WHAT the code does now, not what changed, or apply the 'skip-comment-check' label to bypass."
+            exit 1
+          fi
 ```
 
-**`.github/workflows/ci.yml`** — FastAPI (swap the `quality` job; the `changelog` job and the README-freshness gate are identical):
+**Why only the first 10 lines of the pattern file feed this hard gate:** `comment-hygiene-patterns.txt` has 13 lines — 10 anchored change-narration keyword patterns, then a date pattern, a ticket-reference pattern, and an issue-reference pattern. The last three are unavoidably lower-precision: `^[A-Z]{2,}-[0-9]+` matches a real ticket code like `ABC-123`, but it matches identically shaped, entirely legitimate technical terms just as often — `UTF-8`, `SHA-256`, `RFC-7231` — when they open a comment (anchoring to comment-start, the fix that works for the keyword patterns, does not help here, since the collision is with the *first word* of the comment, not a mid-comment occurrence). A blocking gate cannot carry that false-positive rate. The live hook and lefthook command (both warn-only) still read the full 13-line file, so ticket/date/issue detection stays active as an advisory signal — it only drops out of the surface that can fail a PR.
+
+**Why this gate scans only added lines, not whole files:** `git diff -U0 "$base"...HEAD -- "$f"` plus a `^+`/`^+++` filter isolates exactly the lines a PR introduces, mirroring the design's stated intent for the commit-time surfaces. This matters most for `templatecentral:migrate`-adopted projects: without it, a PR that touches any part of a file carrying a pre-existing narration comment (inherited from before this convention existed) would hard-fail CI forever, and the only relief would be applying the bypass label to every single PR — which defeats the gate. Restricting to added lines means CI only ever fails on narration a PR itself introduces. The live hook and lefthook command (both warn-only) still scan whole file content — a false nudge about a pre-existing comment while editing that file is advisory, not blocking, so the same restriction isn't required there.
+
+**`.github/workflows/ci.yml`** — FastAPI (swap the `quality` job; the `changelog`, `readme-freshness`, and `comment-hygiene` jobs are identical):
 ```yaml
   quality:
     runs-on: ubuntu-latest
@@ -978,7 +1240,7 @@ manifest=".claude/harness.json"
 [ -f "$manifest" ] || { echo "verify-harness: $manifest missing" >&2; exit 2; }
 
 # Enforcement layer only — AGENTS.md / CLAUDE.md / *-verify skills legitimately evolve.
-guard='^(\.claude/hooks/|\.claude/settings\.json$|\.claude/(verify|regen)-harness\.sh$|lefthook\.yml$|\.lefthook/|\.gitleaks\.toml$|\.github/workflows/)'
+guard='^(\.claude/hooks/|\.claude/settings\.json$|\.claude/(verify|regen)-harness\.sh$|\.claude/comment-hygiene-patterns\.txt$|lefthook\.yml$|\.lefthook/|\.gitleaks\.toml$|\.github/workflows/)'
 
 sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
 read_manifest() {
@@ -1196,6 +1458,7 @@ sha256_skillaudit=$(shasum -a 256 .claude/skills/skill-audit/SKILL.md | cut -d' 
 sha256_lefthook=$(shasum -a 256 lefthook.yml | cut -d' ' -f1)
 sha256_commitmsg=$(shasum -a 256 .lefthook/commit-msg.sh | cut -d' ' -f1)
 sha256_gitleaks=$(shasum -a 256 .gitleaks.toml | cut -d' ' -f1)
+sha256_comment_patterns=$(shasum -a 256 .claude/comment-hygiene-patterns.txt | cut -d' ' -f1)
 sha256_ci=$(shasum -a 256 .github/workflows/ci.yml | cut -d' ' -f1)
 sha256_verifyh=$(shasum -a 256 .claude/verify-harness.sh | cut -d' ' -f1)
 sha256_regenh=$(shasum -a 256 .claude/regen-harness.sh | cut -d' ' -f1)
@@ -1204,7 +1467,7 @@ sha256_regenh=$(shasum -a 256 .claude/regen-harness.sh | cut -d' ' -f1)
 **`.claude/harness.json`** (substitute stack name, verify-skill path, and computed hashes):
 ```json
 {
-  "templatecentral_version": "5.12.0",
+  "templatecentral_version": "5.13.0",
   "stack": "<stack>",
   "seeded_at": "<ISO-date>",
   "seeded_files": {
@@ -1222,9 +1485,11 @@ sha256_regenh=$(shasum -a 256 .claude/regen-harness.sh | cut -d' ' -f1)
     ".claude/hooks/subagent-stop.sh": { "origin_hash": "<sha256_hook_7>", "path": ".claude/hooks/subagent-stop.sh" },
     ".claude/hooks/session-context.sh": { "origin_hash": "<sha256_hook_8>", "path": ".claude/hooks/session-context.sh" },
     ".claude/hooks/skill-usage-log.sh": { "origin_hash": "<sha256_hook_9>", "path": ".claude/hooks/skill-usage-log.sh" },
+    ".claude/hooks/post-edit-comment-check.sh": { "origin_hash": "<sha256_hook_10>", "path": ".claude/hooks/post-edit-comment-check.sh" },
     "lefthook.yml": { "origin_hash": "<sha256_lefthook>", "path": "lefthook.yml" },
     ".lefthook/commit-msg.sh": { "origin_hash": "<sha256_commitmsg>", "path": ".lefthook/commit-msg.sh" },
     ".gitleaks.toml": { "origin_hash": "<sha256_gitleaks>", "path": ".gitleaks.toml" },
+    ".claude/comment-hygiene-patterns.txt": { "origin_hash": "<sha256_comment_patterns>", "path": ".claude/comment-hygiene-patterns.txt" },
     ".github/workflows/ci.yml": { "origin_hash": "<sha256_ci>", "path": ".github/workflows/ci.yml" },
     ".claude/verify-harness.sh": { "origin_hash": "<sha256_verifyh>", "path": ".claude/verify-harness.sh" },
     ".claude/regen-harness.sh": { "origin_hash": "<sha256_regenh>", "path": ".claude/regen-harness.sh" }
@@ -1326,10 +1591,10 @@ claude plugin marketplace add obra/superpowers
 ## AI Harness
 PreToolUse: blocks secrets and CI pipeline files only (exit 2): `.env*` (except `.env.example`), CI/CD definitions (`.github/workflows/`, `.github/actions/`, `.azuredevops/`, `azure-pipelines*.y[a]ml`, `.gitlab-ci.yml`, `Jenkinsfile`), cert files (`.pem`/`.key`/`.secret`), `credentials.json`/`.netrc`; a second Bash guard blocks `--no-verify`, hook-layer bypasses (`LEFTHOOK=0`, `git -c core.hooksPath=…`), and force-pushes to protected branches. Skills, specs, and all app code are unrestricted. SessionStart (startup/resume/clear/compact): re-injects AGENTS.md routing context + universal invariants so they survive compaction (PostCompact is observability-only and cannot inject).
 UserPromptSubmit: pattern-checks incoming prompts for injection phrases; exit 2 blocks the prompt.
-PostToolUse: incremental type-check (see delta table for stack command) after every Edit/Write. Feedback-only.
+PostToolUse: incremental type-check (see delta table for stack command) and a comment-hygiene scan (change-narration comments, oversized comment blocks — patterns from `.claude/comment-hygiene-patterns.txt`) after every Edit/Write. Both feedback-only.
 Stop hook: runs full test suite; exit 2 feeds failures to Claude via stderr; exit 0 on pass.
-Git hooks (lefthook): pre-commit runs format/lint/typecheck + gitleaks secret-scan on staged files, plus a readme-coupling staleness warning; commit-msg enforces Conventional Commits; pre-push runs the quality gate. Hard-local; coverage/changed-line gates run in CI.
-CI (GitHub Actions): hard gate on changed-line coverage (`diff-cover` ≥80%), lockfile-in-sync (`--frozen-lockfile`), a changelog-touched check, a readme-freshness check, and a full-history gitleaks scan.
+Git hooks (lefthook): pre-commit runs format/lint/typecheck + gitleaks secret-scan on staged files, plus a readme-coupling staleness warning and a comment-hygiene warning; commit-msg enforces Conventional Commits; pre-push runs the quality gate. Hard-local; coverage/changed-line/comment-hygiene gates run in CI.
+CI (GitHub Actions): hard gate on changed-line coverage (`diff-cover` ≥80%), lockfile-in-sync (`--frozen-lockfile`), a changelog-touched check, a readme-freshness check, a comment-hygiene check on added lines (bypassable via `skip-comment-check` label), and a full-history gitleaks scan.
 Project skills: `.claude/skills/` | Manifest: `.claude/harness.json`
 Context load order (context only — not enforcement, broad → specific): managed policy → `~/.claude/CLAUDE.md` → `CLAUDE.md` `@AGENTS.md` (optional, Claude Code) → this file → `.claude/rules/*.md` (lazy per-directory). Hard enforcement: PreToolUse hooks in `settings.json` only.
 

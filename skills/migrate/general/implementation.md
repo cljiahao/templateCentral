@@ -278,7 +278,7 @@ cat "<skill-dir>/../scaffold/shared/harness-kit.md"
 
 Using the **detected stack's row** in the kit's delta table (TS stacks: `node`; FastAPI: `python3`), execute kit Steps **A through D**:
 - **Step A** — `settings.json` (the `permissions.deny` secret-*Read* block, `skillListingBudgetFraction`, and wiring for the 7 hook events templateCentral seeds).
-- **Step B** — all **9** `.claude/hooks/` scripts (`protect-files`, `block-no-verify`, `user-prompt-guard`, `post-edit-typecheck`, `post-tool-failure`, `stop-checks`, `subagent-stop`, `session-context`, `skill-usage-log`), then `chmod +x .claude/hooks/*.sh`.
+- **Step B** — all **10** `.claude/hooks/` scripts (`protect-files`, `block-no-verify`, `user-prompt-guard`, `post-edit-typecheck`, `post-edit-comment-check`, `post-tool-failure`, `stop-checks`, `subagent-stop`, `session-context`, `skill-usage-log`), `.claude/comment-hygiene-patterns.txt` (the canonical pattern list the new hook, the `comment-hygiene` lefthook command, and the `comment-hygiene` CI job all read at runtime), then `chmod +x .claude/hooks/*.sh`.
 - **Step B2** — git-hook layer (`lefthook.yml`, `.lefthook/commit-msg.sh`, `.gitleaks.toml`).
 - **Step B3** — CI quality gates (`.github/workflows/ci.yml`).
 - **Step B4** — harness integrity verifier (`.claude/verify-harness.sh`, `.claude/regen-harness.sh`) — Phase 5d's re-sync and the pre-push hook both call this, so it MUST be seeded here.
@@ -335,7 +335,7 @@ Before running against production: verify `DATABASE_URL` in `.env.local` points 
 
 **Step 4f: Create `.claude/harness.json`**
 
-Execute kit **Step E** — it hashes **every** seeded file (all 9 hooks, `lefthook.yml`, `.lefthook/commit-msg.sh`, `.gitleaks.toml`, `.github/workflows/ci.yml`, `.claude/verify-harness.sh`, `.claude/regen-harness.sh`, the `<stack>-verify` and `skill-audit` skills, plus `next-migrate` for nextjs) and writes the complete manifest. Include only files that were actually created or merged. The kit is the single source for this manifest — do not maintain a separate copy here.
+Execute kit **Step E** — it hashes **every** seeded file (all 10 hooks, `.claude/comment-hygiene-patterns.txt`, `lefthook.yml`, `.lefthook/commit-msg.sh`, `.gitleaks.toml`, `.github/workflows/ci.yml`, `.claude/verify-harness.sh`, `.claude/regen-harness.sh`, the `<stack>-verify` and `skill-audit` skills, plus `next-migrate` for nextjs) and writes the complete manifest. Include only files that were actually created or merged. The kit is the single source for this manifest — do not maintain a separate copy here.
 
 **Step 4f-1b: Seed the base snapshot**
 
@@ -461,7 +461,7 @@ If any file is `MISSING`, print a warning:
 
 Offer this when there is something to apply — any `MODIFIED`/`MISSING` file, or the project's `harness.json.templatecentral_version` is older than the current plugin version (newer seeded defaults exist). **Never write without explicit user approval.** First present a dry-run plan (per file: the action + a diff preview), then on approval apply per **file class**:
 
-- **Enforcement layer** (`.claude/hooks/*`, `lefthook.yml`, `.lefthook/*`, `.gitleaks.toml`, `.github/workflows/ci.yml`, `.claude/verify-harness.sh`, `.claude/regen-harness.sh`): **overwrite** with the current canonical content from this skill / `scaffold/shared/harness-kit.md`. These are not meant to be hand-edited (the verifier flags them); a re-sync resets them to canonical. Warn if one was `MODIFIED` — and before overwriting, check whether the difference came from a `templatecentral:add` capability that extends a canonical hook (e.g. `add (redaction)` splices a companion block into `user-prompt-guard`); if so, tell the user which capability to re-apply afterwards.
+- **Enforcement layer** (`.claude/hooks/*`, `.claude/comment-hygiene-patterns.txt`, `lefthook.yml`, `.lefthook/*`, `.gitleaks.toml`, `.github/workflows/ci.yml`, `.claude/verify-harness.sh`, `.claude/regen-harness.sh`): **overwrite** with the current canonical content from this skill / `scaffold/shared/harness-kit.md`. These are not meant to be hand-edited (the verifier flags them); a re-sync resets them to canonical. Warn if one was `MODIFIED` — and before overwriting, check whether the difference came from a `templatecentral:add` capability that extends a canonical hook (e.g. `add (redaction)` splices a companion block into `user-prompt-guard`); if so, tell the user which capability to re-apply afterwards.
 - **User-co-owned** (`AGENTS.md`, `CLAUDE.md`, `.claude/skills/<stack>-verify/SKILL.md`):
   - `UNCHANGED` → overwrite with the new canonical.
   - `MODIFIED` → **3-way merge** against the base snapshot:

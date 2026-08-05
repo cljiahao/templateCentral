@@ -97,6 +97,63 @@ check_no_hardcoded_secrets() {
   fi
 }
 
+check_no_comment_narration() {
+  # Change-narration comments rot once the change is no longer recent — same doctrine as
+  # comments.md, applied here to scripts/*.sh and bash fences in skill markdown.
+  header "Change-narration comments"
+  local patterns="skills/scaffold/shared/comment-hygiene-patterns.txt"
+  if [[ ! -f "$patterns" ]]; then
+    fail "Missing $patterns"
+    return
+  fi
+  # This check blocks CI (lint-patterns has no bypass label), so — like the CI gate seeded into
+  # scaffolded projects — it reads only the first 10 (anchored keyword) lines, never the last 3
+  # (date/ticket/issue-ref), which false-positive on legitimate terms like UTF-8/SHA-256/RFC-7231.
+  local strict_patterns
+  strict_patterns=$(mktemp)
+  head -n 10 "$patterns" > "$strict_patterns"
+  local matches="" f line stripped md_file in_bash
+
+  for f in scripts/*.sh; do
+    [[ -f "$f" ]] || continue
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^[[:space:]]*# ]]; then
+        stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*#[[:space:]]?@@')
+        if [[ -n "$stripped" ]] && grep -qEf "$strict_patterns" <<< "$stripped"; then
+          matches="$matches
+$f: $stripped"
+        fi
+      fi
+    done < "$f"
+  done
+
+  while IFS= read -r -d '' md_file; do
+    in_bash=0
+    while IFS= read -r line; do
+      case "$line" in
+        '```bash') in_bash=1; continue ;;
+        '```') in_bash=0; continue ;;
+      esac
+      [[ "$in_bash" -eq 1 ]] || continue
+      if [[ "$line" =~ ^[[:space:]]*# ]]; then
+        stripped=$(printf '%s' "$line" | sed -E 's@^[[:space:]]*#[[:space:]]?@@')
+        if [[ -n "$stripped" ]] && grep -qEf "$strict_patterns" <<< "$stripped"; then
+          matches="$matches
+$md_file: $stripped"
+        fi
+      fi
+    done < "$md_file"
+  done < <(find "$SKILLS_DIR" -name '*.md' -print0)
+  rm -f "$strict_patterns"
+
+  if [[ -n "$matches" ]]; then
+    echo "$matches"
+    fail "Change-narration comments found — state WHAT the code does now, not what changed"
+  else
+    pass "No change-narration comments"
+  fi
+}
+
 check_no_ghost_agent_names() {
   # Ghost agent / skill names that must never appear as invocations in skill files.
   #
@@ -115,10 +172,9 @@ check_no_ghost_agent_names() {
   #   invoked as skills. The correct form is: cat "$HOME/.claude/plugins/marketplaces/templatecentral/skills/<name>/SKILL.md"
   #   Use compact table form: `<name> utility (cat skills/<name>/SKILL.md via plugin root)`
   #
-  # MOVED to repo-internal project skills (v5.1.0):
-  #   templatecentral:audit → /tc-audit, templatecentral:write-skill → /tc-write-skill
-  #   These live in .claude/skills/ (not shipped to installed projects). A plugin-namespaced
-  #   reference (templatecentral:audit / :write-skill) inside shipped skills/ is now a ghost.
+  # Repo-internal project skills (not shipped to installed projects, live in .claude/skills/):
+  #   templatecentral:audit and templatecentral:write-skill are not valid references from
+  #   shipped skills/ — the correct forms are /tc-audit and /tc-write-skill.
   #
   # Still LEGITIMATE (shipped registered skills): templatecentral:scaffold, :add, :migrate, :standards
   # (these are registered skills with `name:` frontmatter and resolve correctly).
@@ -722,6 +778,12 @@ check_scaffold_seeds_complete_harness() {
     'subagent-stop.sh' 'session-context.sh'
     'stop_hook_active' '--no-verify' 'AKIA'
     'node' 'python3'
+    # Content-authoring token, not just a path reference: catches the class of bug where a
+    # seeded file's path is wired into settings.json/harness.json/protect-files.sh everywhere
+    # but the kit never actually authors its content — a scaffolded project ends up with every
+    # consumer pointing at a file that's never created, and verify-harness.sh then hard-fails
+    # on MISSING for every fresh scaffold. This exact gap shipped once in comment-hygiene-patterns.txt.
+    '[Ww][Aa][Ss][[:space:]]'
   )
   local missing="" tok
   if [[ ! -f "$kit" ]]; then
@@ -749,6 +811,78 @@ check_scaffold_seeds_complete_harness() {
     fail "Harness check failed — kit must contain all universal tokens; all 4 scaffolds + migrate must reference scaffold/shared/harness-kit.md; each scaffold must seed a *-verify/SKILL.md"
   else
     pass "Shared harness kit contains all universal tokens; all scaffold/migrate files reference it"
+  fi
+}
+
+check_migrate_hook_inventory_matches_kit() {
+  # migrate/general/implementation.md enumerates the kit's hooks by name in prose (Step 4d),
+  # separate from the kit's own authoring blocks — a hook added to the kit without updating
+  # that list leaves every migrated project short a hook.
+  header "migrate hook inventory matches harness-kit.md"
+  local kit="$SKILLS_DIR/scaffold/shared/harness-kit.md"
+  local migrate="$SKILLS_DIR/migrate/general/implementation.md"
+  if [[ ! -f "$kit" || ! -f "$migrate" ]]; then
+    fail "Missing $kit or $migrate"
+    return
+  fi
+  local hooks missing="" h
+  hooks=$(grep -oE '^\*\*`\.claude/hooks/[a-zA-Z0-9_-]+' "$kit" | sed -E 's#.*/##' | sort -u)
+  for h in $hooks; do
+    grep -qF -- "$h" "$migrate" || missing+="migrate is missing hook: $h"$'\n'
+  done
+  grep -qF -- '.claude/comment-hygiene-patterns.txt' "$migrate" || \
+    missing+="migrate does not mention .claude/comment-hygiene-patterns.txt"$'\n'
+  if [[ -n "$missing" ]]; then
+    echo "$missing"
+    fail "migrate's hook/file inventory has drifted from harness-kit.md — update skills/migrate/general/implementation.md Step 4d"
+  else
+    pass "migrate's hook inventory covers every hook + file authored in harness-kit.md"
+  fi
+}
+
+check_yaml_fences_parse() {
+  # A seeded lefthook.yml/ci.yml is authored as a ```yaml fence in prose docs — nothing else
+  # ever parses it before it reaches a real project. A shell variable assignment that spans
+  # physical lines inside a `run: |` block scalar silently breaks YAML indentation rules
+  # without any syntax error in the shell itself, so this must parse the fence content, not
+  # just lint the shell inside it. TIMELESS: catches this bug class regardless of cause.
+  header "Seeded \`\`\`yaml fences parse as valid YAML"
+  if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import yaml' >/dev/null 2>&1; then
+    pass "skipped (python3/PyYAML not available)"
+    return
+  fi
+  local out
+  out=$(python3 - "$SKILLS_DIR" <<'PY'
+import os, sys, yaml
+root = sys.argv[1]
+bad = []
+for dp, _, fs in os.walk(root):
+    for f in fs:
+        if not f.endswith('.md'): continue
+        p = os.path.join(dp, f)
+        lines = open(p, encoding='utf-8').read().split('\n')
+        i = 0
+        while i < len(lines):
+            if lines[i].strip() == '```yaml':
+                start = i + 1
+                j = start
+                while j < len(lines) and lines[j].strip() != '```':
+                    j += 1
+                try:
+                    list(yaml.safe_load_all('\n'.join(lines[start:j])))
+                except Exception as e:
+                    bad.append(f"{p}:{start+1}-{j}: {str(e).splitlines()[0]}")
+                i = j + 1
+            else:
+                i += 1
+for b in bad: print(b)
+PY
+)
+  if [[ -n "$out" ]]; then
+    echo "$out"
+    fail "Seeded yaml fence(s) fail to parse — check block-scalar (run: |) indentation"
+  else
+    pass "All seeded yaml fences parse"
   fi
 }
 
@@ -950,6 +1084,7 @@ check_no_cve_identifiers
 check_no_jurisdiction_specific
 check_no_hardcoded_secrets
 check_no_ghost_agent_names
+check_no_comment_narration
 check_owasp_llm_sections_complete
 check_skillmd_description_length
 check_ref_file_headers
@@ -960,6 +1095,8 @@ check_no_unscoped_bash_grant
 check_seeded_skill_paths_are_directories
 check_no_toplevel_command_in_hooks
 check_scaffold_seeds_complete_harness
+check_migrate_hook_inventory_matches_kit
+check_yaml_fences_parse
 check_no_absolute_plugin_path
 check_skilldir_refs_resolve
 check_ref_header_prereq_suffix
