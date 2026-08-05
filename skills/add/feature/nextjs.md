@@ -38,7 +38,8 @@ src/features/<feature-name>/
 │   └── index.ts
 ├── hooks/                       # React hooks (queries, mutations, local state)
 │   └── index.ts
-├── schemas/                     # Zod validation schemas (see Step 4b)
+├── schemas/                     # Zod validation schemas (form inputs + API response shapes)
+│   └── index.ts
 ├── constants.ts                 # Static data (arrays, config objects, options)
 ├── types.ts                     # TypeScript interfaces and types
 └── index.ts                     # Barrel export
@@ -71,13 +72,30 @@ export const STATUS_OPTIONS = [
 
 Data access services consumed by React Query hooks on the client side:
 
+First define a Zod schema for the API response shape — every response is validated at the boundary, so the declared return type is earned at runtime rather than asserted:
+
+```ts
+// schemas/project.schema.ts
+import { z } from 'zod';
+
+export const projectItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  status: z.enum(['active', 'archived']),
+});
+```
+
+Export from barrel: `schemas/index.ts`
+
+Then create the service:
+
 ```ts
 // api/project-service.ts
 import { APIError } from '@/integrations/error';
+import { projectItemSchema } from '../schemas';
 import type { ProjectItem } from '../types';
 
-// Every service method maps a non-2xx response to APIError; the fallback message
-// applies only when the body is not valid JSON
+// The fallback message applies only when the body is not valid JSON
 async function assertOk(res: Response, message: string): Promise<void> {
   if (res.ok) return;
   throw new APIError({
@@ -90,14 +108,14 @@ export const ProjectService = {
   getAll: async (): Promise<ProjectItem[]> => {
     const res = await fetch('/api/projects');
     await assertOk(res, 'Failed to fetch projects');
-    return res.json();
+    return projectItemSchema.array().parse(await res.json());
   },
 
   getById: async (id: string): Promise<ProjectItem> => {
     // Encode interpolated path segments — ids are frequently user-supplied
     const res = await fetch(`/api/projects/${encodeURIComponent(id)}`);
     await assertOk(res, 'Project not found');
-    return res.json();
+    return projectItemSchema.parse(await res.json());
   },
 
   create: async (data: Omit<ProjectItem, 'id'>): Promise<ProjectItem> => {
@@ -107,16 +125,16 @@ export const ProjectService = {
       body: JSON.stringify(data),
     });
     await assertOk(res, 'Failed to create project');
-    return res.json();
+    return projectItemSchema.parse(await res.json());
   },
 };
 ```
 
 Export from barrel: `api/index.ts`
 
-### 4b. Create Schemas (in `schemas/`, Optional)
+### 4b. Add Form Schemas (in `schemas/`)
 
-Create Zod schemas when the feature has form validation or needs to parse external API responses. Skip this step if the feature only consumes typed data from its own service.
+Step 4 already added the response schema. Add an input schema alongside it whenever the feature has a form:
 
 ```ts
 // schemas/project-schemas.ts

@@ -9,6 +9,8 @@ Create a new third-party API integration in a FastAPI project scaffolded from te
 
 Requires a project scaffolded with `templatecentral:scaffold`. See Step 0.
 
+> **Placeholder names**: `<name>` in the file paths below and `github`/`Github`/`GITHUB` in the code are the same integration name in three casings. Substitute your actual service name for all of them (e.g. `stripe`/`Stripe`/`STRIPE`) — writing a literal `<name>_client.py` while the imports still say `integrations.github_client` breaks every import in this skill.
+
 ### Architecture
 
 ```
@@ -182,8 +184,6 @@ GITHUB_TOKEN=your_github_token_here
 
 ```python
 from collections.abc import AsyncGenerator
-
-from fastapi import Depends
 
 from core.config import api_settings
 from integrations.github_client import GithubClient

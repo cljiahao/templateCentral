@@ -7,9 +7,10 @@ Migrates an existing SQLAlchemy (password auth) setup to SQLAlchemy + AWS IAM au
 
 On the application side this is a **config-only change** — no schema or query code changes needed. The AWS-side prerequisites in Step 0 are not optional: without them the app fails at connect time with an opaque `PAM authentication failed` error.
 
-> **Canonical source**: the session/config module below is duplicated near-verbatim from
-> `add/database/python/sqlalchemy-iam.md` — treat that file as canonical and keep the two in
-> sync, especially the security-sensitive `sslmode` / `sslrootcert` connect args.
+> **Canonical source**: the session module (Step 2) and `alembic/env.py` block (Step 4) below
+> are duplicated verbatim from `add/database/python/sqlalchemy-iam.md` — treat that file as
+> canonical. `scripts/lint-skills.sh` fails the build if the two copies drift, so re-copy
+> rather than hand-editing here; the `sslmode` / `sslrootcert` connect args are the reason.
 
 ### Step 0 — Prerequisites (AWS side, before any code change)
 

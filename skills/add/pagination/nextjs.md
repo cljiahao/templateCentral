@@ -188,92 +188,118 @@ export const GET = withLogging(async (request) => {
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { z } from 'zod';
 import { Button } from '@/components/ui/button';
+import { APIError } from '@/integrations/error';
 
-interface Project {
-  id: string;
-  name: string;
-  description: string | null;
-}
+const PAGE_SIZE = 10;
 
-interface PaginatedResponse {
-  items: Project[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    hasMore: boolean;
-  };
+const projectItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+});
+
+type ProjectItem = z.infer<typeof projectItemSchema>;
+
+// Mirrors the envelope the route above returns: { data: { items, pagination } }
+const paginatedProjectsSchema = z.object({
+  data: z.object({
+    items: z.array(projectItemSchema),
+    pagination: z.object({
+      page: z.number(),
+      limit: z.number(),
+      total: z.number(),
+      hasMore: z.boolean(),
+    }),
+  }),
+});
+
+async function fetchProjects(page: number, limit: number) {
+  const response = await fetch(`/api/projects?page=${page}&limit=${limit}&sort=asc_name`);
+
+  if (!response.ok) {
+    throw new APIError({
+      statusCode: response.status,
+      data: await response.json().catch(() => ({ message: 'Failed to fetch projects' })),
+    });
+  }
+
+  const json: unknown = await response.json();
+
+  const parsed = paginatedProjectsSchema.safeParse(json);
+  if (!parsed.success) {
+    throw new APIError({
+      statusCode: 502,
+      data: { message: 'Received an unexpected response from the server.' },
+    });
+  }
+
+  return parsed.data.data;
 }
 
 export function ProjectsList() {
   const [page, setPage] = useState(1);
-  const limit = 10;
 
-  const { data, isPending, error } = useQuery({
+  const { data, isPending, isFetching, error } = useQuery({
     queryKey: ['projects', page],
-    queryFn: async () => {
-      const response = await fetch(
-        `/api/projects?page=${page}&limit=${limit}&sort=asc_name`
-      );
-      if (!response.ok) throw new Error('Failed to fetch projects');
-      const json: unknown = await response.json();
-      if (
-        typeof json !== 'object' ||
-        json === null ||
-        !('data' in json) ||
-        typeof (json as { data: unknown }).data !== 'object'
-      ) {
-        throw new Error('Malformed pagination response');
-      }
-      return (json as { data: PaginatedResponse }).data;
-    },
+    queryFn: () => fetchProjects(page, PAGE_SIZE),
+    // The page number is part of the queryKey, so every Next/Previous click is a
+    // cache miss. Without this, isPending flips true and the whole list unmounts
+    // and re-mounts on each click. keepPreviousData holds the previous page's rows
+    // on screen (with isFetching true) until the new page resolves.
+    placeholderData: keepPreviousData,
   });
 
+  // isPending is true only for the very first load — with keepPreviousData a page
+  // change keeps the previous rows mounted and surfaces as isFetching instead.
   if (isPending) return <div>Loading...</div>;
-  if (error) return <div>Error loading projects</div>;
+  if (error) return <div role="alert">Failed to load projects.</div>;
 
   const { items: projects, pagination } = data;
 
   return (
     <div className="space-y-4">
-      <ul className="space-y-2">
-        {projects.map((project: Project) => (
-          <li key={project.id} className="border p-2 rounded">
+      <ul className={isFetching ? 'space-y-2 opacity-60 transition-opacity' : 'space-y-2'}>
+        {projects.map((project: ProjectItem) => (
+          <li key={project.id} className="rounded border p-2">
             <h3 className="font-bold">{project.name}</h3>
-            {project.description && <p className="text-sm text-muted-foreground">{project.description}</p>}
+            {project.description && (
+              <p className="text-muted-foreground text-sm">{project.description}</p>
+            )}
           </li>
         ))}
       </ul>
 
-      {/* Pagination controls */}
-      <div className="flex gap-2 items-center justify-between">
-        <Button
-          variant="outline"
-          disabled={page === 1}
-          onClick={() => setPage(page - 1)}
-        >
-          Previous
-        </Button>
+      <nav aria-label="Pagination" className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <Button
+            variant="outline"
+            disabled={page === 1 || isFetching}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            Previous
+          </Button>
 
-        <span>
-          Page {pagination.page} of {Math.ceil(pagination.total / pagination.limit)}
-        </span>
+          <span>
+            Page {pagination.page} of {Math.ceil(pagination.total / pagination.limit)}
+          </span>
 
-        <Button
-          variant="outline"
-          disabled={!pagination.hasMore}
-          onClick={() => setPage(page + 1)}
-        >
-          Next
-        </Button>
-      </div>
+          <Button
+            variant="outline"
+            disabled={!pagination.hasMore || isFetching}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+          </Button>
+        </div>
 
-      <div className="text-sm text-muted-foreground">
-        Showing {(page - 1) * limit + 1} to {Math.min(page * limit, pagination.total)} of{' '}
-        {pagination.total} results
-      </div>
+        <div aria-live="polite" className="text-muted-foreground text-sm">
+          Showing {(page - 1) * pagination.limit + 1} to{' '}
+          {Math.min(page * pagination.limit, pagination.total)} of {pagination.total} results
+        </div>
+      </nav>
     </div>
   );
 }
@@ -308,6 +334,22 @@ curl 'http://localhost:3000/api/projects?page=1&limit=10&sort=asc_invalid'
 pnpm test
 pnpm build
 ```
+
+## Rules
+
+- Always set `placeholderData: keepPreviousData` on a paginated query — without it every page click blanks the list
+- Drive loading/disabled UI off `isFetching` for page changes; `isPending` covers only the first load
+- Validate the response with Zod `safeParse` and derive the row type from the schema — never hand-roll a type guard or re-declare the row shape alongside it
+- Always throw `APIError` (imported from `@/integrations/error`, not `@/lib/errors` — that barrel pulls server-only modules into the client bundle), never a generic `Error`
+- Whitelist every sortable field before it reaches the ORM's `orderBy` — `parseSortParam` returns `null` for anything outside the list
+- Use the shadcn `Button` for pagination controls — never a raw `<button>`
+
+## See Also
+
+- `templatecentral:add` (error-handling) — Pagination errors use unified error response schema
+- `templatecentral:standards` (validation-patterns) — Pagination query params validated with Zod
+- `templatecentral:add (endpoint)` — Add pagination to new list endpoints
+- Stack-specific `code-standards` — Database indexing best practices for sort fields
 
 ## After Writing Code
 

@@ -45,14 +45,11 @@ For each `route.ts` file identified in Phase 1c, create the corresponding NestJS
 | `return NextResponse.json({ error: 'Not found' }, { status: 404 })` | `throw new HttpException('Not found', HttpStatus.NOT_FOUND)` |
 | Dynamic segment `[id]/route.ts` | Single controller method with `@Param('id')` |
 
-**Controller template** (adapt for each resource):
+**Controller template** (adapt for each resource). The import list carries only what this template uses — add `Put`, `Delete`, `HttpException`, and `HttpStatus` as the mapping table above calls for them, since the scaffold's ESLint fails the build on an unused import:
 
 ```typescript
 // src/modules/users/users.controller.ts
-import {
-  Controller, Get, Post, Put, Delete,
-  Body, Param, HttpCode, HttpException, HttpStatus,
-} from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';

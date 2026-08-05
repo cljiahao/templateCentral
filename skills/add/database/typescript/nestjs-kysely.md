@@ -190,6 +190,11 @@ RDS_CA_BUNDLE_PATH=certs/rds-global-bundle.pem
 
 > IAM auth does not use a password — `@aws-sdk/rds-signer` generates a short-lived token automatically from the instance's IAM role.
 
+> **Apply the same pool config to the migration runner.** `src/database/migrate.ts` (B6) builds
+> its own `Pool` from `serviceConfig.DATABASE_URL`, which no longer exists under IAM — give it the
+> same `Signer` + `ssl: { rejectUnauthorized: true, ca: readFileSync(...) }` options as the service
+> above, or `pnpm migrate` fails to connect while the app itself works.
+
 #### B3. Define Database Types
 
 **`src/database/types.ts`**:

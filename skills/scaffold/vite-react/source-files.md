@@ -387,7 +387,7 @@ import { ENV } from '@/lib/constants/env';
 import { createContext, useCallback, useMemo, useState, type ReactNode } from 'react';
 import type { AuthUser } from '../types';
 
-const DEV_USER: AuthUser = {
+export const DEV_USER: AuthUser = {
   id: 'dev',
   name: 'Dev User',
   email: 'dev@local',
@@ -446,13 +446,14 @@ import { ENV } from '@/lib/constants/env';
 import { PAGE_ROUTES } from '@/lib/constants/routes';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../hooks/use-auth';
+import { DEV_USER } from './auth-provider';
 
 export function LoginCard() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleDevLogin = () => {
-    login({ id: 'dev', name: 'Dev User', email: 'dev@local' });
+    login(DEV_USER);
     navigate(PAGE_ROUTES.DASHBOARD);
   };
 
@@ -666,15 +667,27 @@ export function ExampleList() {
   const { data: items, isPending, error } = useExampleItems();
 
   if (isPending) {
-    return <p className="text-muted-foreground">Loading...</p>;
+    return (
+      <p role="status" className="text-muted-foreground">
+        Loading...
+      </p>
+    );
   }
 
   if (error) {
-    return <p className="text-destructive">Failed to load items.</p>;
+    return (
+      <p role="alert" className="text-destructive">
+        Failed to load items.
+      </p>
+    );
   }
 
   if (!items?.length) {
-    return <p className="text-muted-foreground">No items found.</p>;
+    return (
+      <p role="status" className="text-muted-foreground">
+        No items found.
+      </p>
+    );
   }
 
   return (
@@ -804,7 +817,7 @@ export function Navbar() {
   const { pathname } = useLocation();
 
   return (
-    <nav className="bg-card sticky top-0 z-50 w-full border-b">
+    <nav aria-label="Main" className="bg-card sticky top-0 z-50 w-full border-b">
       <div className="max-w-site flex-between mx-auto px-6 py-4">
         <Link to={PAGE_ROUTES.HOME} className="text-xl font-bold tracking-tight">
           templateCentral
@@ -815,6 +828,9 @@ export function Navbar() {
             <Link
               key={link.href}
               to={link.href}
+              // Colour alone cannot convey the active link — aria-current is what
+              // reaches assistive tech and users who can't distinguish the hue.
+              aria-current={pathname === link.href ? 'page' : undefined}
               className={cn(
                 'hover:text-primary text-sm font-medium transition-colors',
                 pathname === link.href ? 'text-primary' : 'text-muted-foreground'
@@ -1210,6 +1226,8 @@ const BINARY_CONTENT_TYPES = [
 
 const TEXT_CONTENT_TYPES = ['text/plain', 'text/html', 'text/csv', 'text/xml', 'application/xml'];
 
+const REQUEST_TIMEOUT_MS = 30_000;
+
 export abstract class FetchClient {
   constructor(
     protected baseUrl: string,
@@ -1242,13 +1260,15 @@ export abstract class FetchClient {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
+      // fetch has no default timeout — an unresponsive upstream would leave the
+      // calling React Query hook pending indefinitely without this.
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
     if (!res.ok) {
       const data = await this.parseErrorBody(res);
-      if (import.meta.env.DEV) {
-        console.error(`${res.status} ${res.statusText}:`, data);
-      }
+      // Log status/URL only — never the error body (may contain PII)
+      console.error(`[HTTP ${res.status}] ${res.statusText} from ${res.url}`);
       throw new APIError({ statusCode: res.status, data });
     }
 

@@ -115,8 +115,17 @@ export function CreateProjectForm() {
 ```tsx
 // src/features/projects/components/file-upload-form.tsx
 import { getApiBaseUrl } from '@/lib/constants';
+import { logError } from '@/lib/errors';
 import { type ChangeEvent, useState } from 'react';
 import { z } from 'zod';
+
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+// One whitelist per representation of the same rule. ALLOWED_EXTENSIONS drives the
+// `accept` attribute below, so the picker and the validator can never disagree;
+// ALLOWED_TYPES cannot be derived from it and must be edited alongside.
+const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'pdf'] as const;
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf'] as const;
+const ACCEPT_ATTRIBUTE = ALLOWED_EXTENSIONS.map((ext) => `.${ext}`).join(',');
 
 // Canonical definition lives in standards/validation-patterns/patterns.md (fileUploadSchema)
 // — keep the extension whitelist and path-traversal checks identical; do not weaken.
@@ -142,24 +151,16 @@ const fileUploadSchema = z.object({
     .refine(
       (name) => {
         try {
-          const decoded = decodeURIComponent(name);
-          const ext = decoded.split('.').pop()?.toLowerCase();
-          // Whitelist (Rule 5) — must stay in sync with the MIME whitelist below
-          const allowed = ['jpg', 'jpeg', 'png', 'pdf'];
-          return allowed.includes(ext || '');
+          const ext = decodeURIComponent(name).split('.').pop()?.toLowerCase() ?? '';
+          return (ALLOWED_EXTENSIONS as readonly string[]).includes(ext);
         } catch {
           return false;
         }
       },
       'File type not allowed'
     ),
-  size: z.number().max(10 * 1024 * 1024, 'File must be under 10MB'),
-  type: z
-    .string()
-    .refine(
-      (type) => ['image/jpeg', 'image/png', 'application/pdf'].includes(type),
-      'File type must be JPEG, PNG, or PDF'
-    ),
+  size: z.number().max(MAX_UPLOAD_BYTES, 'File must be under 10MB'),
+  type: z.enum(ALLOWED_TYPES, { error: 'File type must be JPEG, PNG, or PDF' }),
 });
 
 export function FileUploadForm() {
@@ -174,7 +175,7 @@ export function FileUploadForm() {
       setError(null);
       setIsUploading(true);
 
-      // Client-side validation (user feedback only)
+      // Fast feedback only — the server repeats every one of these checks
       const validation = fileUploadSchema.safeParse({
         name: file.name,
         size: file.size,
@@ -187,23 +188,22 @@ export function FileUploadForm() {
         return;
       }
 
-      // Upload to server
       const formData = new FormData();
       formData.append('file', file);
 
       const response = await fetch(`${getApiBaseUrl()}/projects/upload`, {
         method: 'POST',
         body: formData,
-        // Note: Don't set Content-Type; browser handles multipart
+        // Don't set Content-Type — the browser must add its own multipart boundary
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        setError(data.error || 'Upload failed');
+        // The backend's error text is for engineers, not users — log it, show a fixed string.
+        const body = await response.json().catch(() => ({}));
+        logError('FileUploadForm: upload failed', new Error(String(body.error ?? response.status)));
+        setError('Upload failed. Please try again.');
         return;
       }
-
-      // Success - file is uploaded and server-validated
     } catch {
       setError('An error occurred during upload');
     } finally {
@@ -218,13 +218,21 @@ export function FileUploadForm() {
         <input
           id="file"
           type="file"
-          accept=".jpg,.jpeg,.png,.pdf"
+          accept={ACCEPT_ATTRIBUTE}
           onChange={handleFileChange}
           disabled={isUploading}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? 'file-error' : undefined}
           className="w-full"
         />
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        {isUploading && <p className="text-sm text-primary">Uploading...</p>}
+        {error && (
+          <p id="file-error" role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        <p aria-live="polite" className="text-sm text-primary">
+          {isUploading ? 'Uploading...' : ''}
+        </p>
       </div>
     </div>
   );

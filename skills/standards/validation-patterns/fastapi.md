@@ -148,8 +148,7 @@ async def upload_project_file(file: UploadFile = File(...)):
     if Path(file.filename).name != file.filename:
         raise InvalidInputError("Invalid filename")
 
-    # Safe to use: file.filename, contents
-    # await storage.save(file.filename, contents)
+    # Both file.filename and contents are validated — hand them to the storage layer here.
 
     return {"data": {"message": "File uploaded successfully"}}
 ```

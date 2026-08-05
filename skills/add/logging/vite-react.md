@@ -37,7 +37,7 @@ An in-memory ring buffer (last 20 entries) attached to every error report. Label
 
 ```ts
 // src/lib/logging/breadcrumbs.ts
-const MAX = 20;
+const MAX_BREADCRUMBS = 20;
 const buffer: Array<{ type: string; label: string; ts: string }> = [];
 
 // Navigation labels are URL paths, and paths routinely carry the exact values that
@@ -55,7 +55,7 @@ export function redactLabel(label: string): string {
 }
 
 export function addBreadcrumb(crumb: { type: string; label: string }): void {
-  if (buffer.length >= MAX) buffer.shift();
+  if (buffer.length >= MAX_BREADCRUMBS) buffer.shift();
   buffer.push({ type: crumb.type, label: redactLabel(crumb.label), ts: new Date().toISOString() });
 }
 

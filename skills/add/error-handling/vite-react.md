@@ -24,7 +24,6 @@ The scaffolded file already imports `ErrorInfo` and defines `componentDidCatch` 
 // src/components/layout/error-boundary.tsx
 import { logError } from '@/lib/errors/error-log-handler';
 
-// Replace the existing componentDidCatch with:
 componentDidCatch(error: Error, errorInfo: ErrorInfo) {
   logError('ErrorBoundary caught an error', error);
   if (import.meta.env.DEV) {
@@ -41,7 +40,7 @@ Async error coverage needs no work. `src/lib/errors/global-handlers.ts` already 
 
 **3. React Query Error Handler**
 
-> **Behavior change vs. the scaffold.** The scaffolded `providers.tsx` client uses `staleTime: 60 * 1000` (1 min) with `refetchOnWindowFocus: false`. The options below raise `staleTime` to 5 min and drop the `refetchOnWindowFocus` override (so it reverts to TanStack's default `true` — every tab focus refetches stale queries). Keep the scaffold's values instead if you did not intend that; only the cache handlers are required for error logging.
+> The `defaultOptions` below match the scaffolded `providers.tsx` client exactly — only the `queryCache`/`mutationCache` handlers are new. If you tune `staleTime` or `refetchOnWindowFocus`, change them here only; this singleton replaces the one `providers.tsx` created.
 
 ```ts
 // src/lib/clients/query-client.ts

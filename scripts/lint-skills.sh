@@ -840,6 +840,83 @@ check_migrate_hook_inventory_matches_kit() {
   fi
 }
 
+check_duplicated_iam_blocks_match() {
+  # The AWS IAM session/config modules exist in two independently-loaded flows: the add-database
+  # leaf that installs them and the migrate-database leaf that retrofits them.
+  # Deduplicating by cross-catting is the wrong trade here — the add leaves are 232/517-line
+  # from-scratch install guides, so a migrate flow would pay their full token cost to reuse ~70
+  # lines, and risks re-running the install steps. Duplicating the block costs nothing at runtime
+  # (each flow loads exactly one copy) and only risks silent drift — which this check removes.
+  # The add leaf is canonical; the migrate copy must match it byte for byte. Security-critical:
+  # these blocks carry sslmode=verify-full / rejectUnauthorized + CA-bundle settings, where a
+  # one-sided edit silently downgrades TLS on the migrate path only.
+  # TIMELESS: enforces the invariant, not any particular stack version.
+  header "Duplicated IAM session/config blocks match their canonical source"
+  if ! command -v python3 >/dev/null 2>&1; then
+    pass "skipped (python3 not available)"
+    return
+  fi
+  local out
+  out=$(python3 - "$SKILLS_DIR" <<'PY'
+import sys
+root = sys.argv[1]
+
+# (label, canonical file, canonical anchor, copy file, copy anchor, fence language)
+PAIRS = [
+    ("FastAPI IAM session.py",
+     "add/database/python/sqlalchemy-iam.md", "### A4. Create `src/database/session.py`",
+     "migrate/database/fastapi.md", "### Step 2 — Replace `src/database/session.py`", "python"),
+    ("FastAPI IAM alembic/env.py",
+     "add/database/python/sqlalchemy-iam.md", "### A6. Update `alembic/env.py`",
+     "migrate/database/fastapi.md", "### Step 4 — Update `alembic/env.py`", "python"),
+    ("NestJS IAM KyselyService",
+     "add/database/typescript/nestjs-kysely.md", "Replace the entire contents of `kysely.service.ts` with:",
+     "migrate/database/nestjs.md", "### Step 4 — Create `src/database/kysely.service.ts` (IAM variant)", "typescript"),
+    ("NestJS IAM serviceConfig fields",
+     "add/database/typescript/nestjs-kysely.md", "Add IAM fields to `serviceConfig`",
+     "migrate/database/nestjs.md", "### Step 10 — Update `src/config/env.config.ts`", "typescript"),
+]
+
+def fence_after(path, anchor, lang):
+    try:
+        lines = open(path, encoding="utf-8").read().split("\n")
+    except OSError:
+        return None
+    start = next((i for i, l in enumerate(lines) if anchor in l), None)
+    if start is None:
+        return None
+    i = start + 1
+    while i < len(lines):
+        if lines[i].strip() == '```' + lang:
+            j = i + 1
+            while j < len(lines) and not lines[j].startswith('```'):
+                j += 1
+            return "\n".join(lines[i + 1:j])
+        i += 1
+    return None
+
+bad = []
+for label, ca_f, ca_a, cp_f, cp_a, lang in PAIRS:
+    ca_p, cp_p = root + "/" + ca_f, root + "/" + cp_f
+    a, b = fence_after(ca_p, ca_a, lang), fence_after(cp_p, cp_a, lang)
+    if a is None:
+        bad.append("%s: canonical anchor/fence not found in %s (%r)" % (label, ca_f, ca_a))
+    elif b is None:
+        bad.append("%s: copy anchor/fence not found in %s (%r)" % (label, cp_f, cp_a))
+    elif a != b:
+        bad.append("%s: %s has drifted from canonical %s" % (label, cp_f, ca_f))
+for x in bad:
+    print(x)
+PY
+)
+  if [[ -n "$out" ]]; then
+    echo "$out"
+    fail "Duplicated IAM block drifted — the add/ leaf is canonical; re-copy it into the migrate/ leaf"
+  else
+    pass "All duplicated IAM blocks match their canonical source"
+  fi
+}
+
 check_yaml_fences_parse() {
   # A seeded lefthook.yml/ci.yml is authored as a ```yaml fence in prose docs — nothing else
   # ever parses it before it reaches a real project. A shell variable assignment that spans
@@ -1096,6 +1173,7 @@ check_seeded_skill_paths_are_directories
 check_no_toplevel_command_in_hooks
 check_scaffold_seeds_complete_harness
 check_migrate_hook_inventory_matches_kit
+check_duplicated_iam_blocks_match
 check_yaml_fences_parse
 check_no_absolute_plugin_path
 check_skilldir_refs_resolve

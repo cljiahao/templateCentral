@@ -37,10 +37,15 @@ rm -rf drizzle/
 
 ### Step 4 — Create `src/database/kysely.service.ts` (IAM variant)
 
+> **Canonical source**: the `KyselyService` block below and the `serviceConfig` block in
+> Step 10 are duplicated verbatim from `add/database/typescript/nestjs-kysely.md` (its
+> "IAM Auth Variant" section) — treat that file as canonical. `scripts/lint-skills.sh`
+> fails the build if the two copies drift, so re-copy rather than hand-editing here.
+
 **Download the AWS RDS CA bundle first.** RDS server certificates chain to the Amazon RDS
-root CA, which is not in Node's default trust store — without the bundle,
-`rejectUnauthorized: true` fails with `SELF_SIGNED_CERT_IN_CHAIN` and the tempting "fix"
-(`rejectUnauthorized: false`) silently downgrades every connection to unauthenticated TLS.
+root CA, which is not in Node's default trust store — without the bundle, TLS verification
+fails with `SELF_SIGNED_CERT_IN_CHAIN` and the tempting "fix" (`rejectUnauthorized: false`)
+silently downgrades the connection to unauthenticated TLS.
 
 ```bash
 mkdir -p certs
@@ -48,10 +53,10 @@ curl -fsSL -o certs/rds-global-bundle.pem \
   https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
 ```
 
-Commit `certs/rds-global-bundle.pem` (a public certificate, not a secret) or bake it into
-the Docker image, and add `RDS_CA_BUNDLE_PATH=certs/rds-global-bundle.pem` to `.env` and
-`.env.example`. In a container, `NODE_EXTRA_CA_CERTS=/app/certs/rds-global-bundle.pem` is
-an equivalent process-wide alternative to the explicit `ca` option below.
+Commit `certs/rds-global-bundle.pem` (it is a public certificate, not a secret) or bake it
+into the Docker image, and add `RDS_CA_BUNDLE_PATH=certs/rds-global-bundle.pem` to `.env`
+and `.env.example`. In a container, `NODE_EXTRA_CA_CERTS=/app/certs/rds-global-bundle.pem`
+is an equivalent process-wide alternative to the explicit `ca` option below.
 
 ```typescript
 import { readFileSync } from 'node:fs';

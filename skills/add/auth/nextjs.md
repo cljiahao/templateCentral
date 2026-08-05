@@ -394,7 +394,6 @@ import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { CustomCard } from '@/components/widgets/custom-card';
-import { LoginButton } from './login-button';
 
 const DEV_EMAIL = 'dev@local';
 const DEV_PASSWORD = 'dev-password-local';
@@ -423,7 +422,7 @@ export function LoginCard() {
   return (
     <CustomCard header="Sign in" className="w-full max-w-sm">
       <div className="flex flex-col gap-3">
-        {/* Add SSO provider buttons here — one LoginButton per provider */}
+        {/* Add SSO provider buttons here — import LoginButton and render one per provider */}
         {isDev && (
           <Button onClick={handleDevLogin} variant="outline">
             Dev login (bypass auth)

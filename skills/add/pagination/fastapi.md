@@ -99,11 +99,11 @@ class PaginationService:
         allowed_fields: list[str]
     ) -> tuple[str, str] | None:
         """Parse sort parameter to (field, direction) tuple.
-        
+
         Args:
             sort: Sort string format: 'asc_fieldName' or 'desc_fieldName'
             allowed_fields: Whitelist of allowed field names
-            
+
         Returns:
             Tuple of (field, direction) or None if invalid
         """

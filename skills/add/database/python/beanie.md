@@ -212,6 +212,10 @@ from beanie import PydanticObjectId
 from core.security import create_access_token, hash_password, verify_password
 from models.user import User
 
+# Verified on the miss path so an unknown email costs the same as a wrong
+# password — without it, response timing leaks which accounts exist.
+DUMMY_HASH = "$argon2id$v=19$m=65536,t=3,p=1$c29tZXNhbHRzb21lc2E$Rdo0OMHkQXBTOTBqNCn0mPvBGiLxvGBIbxKZ0nJ0Aqo"
+
 
 async def register_user(email: str, password: str, name: str) -> dict:
     if await User.find_one(User.email == email):
@@ -229,7 +233,8 @@ async def register_user(email: str, password: str, name: str) -> dict:
 
 async def login_user(email: str, password: str) -> str:
     user = await User.find_one(User.email == email)
-    if not user or not verify_password(password, user.hashed_password):
+    password_ok = verify_password(password, user.hashed_password if user else DUMMY_HASH)
+    if user is None or not password_ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials.",

@@ -132,12 +132,12 @@ export class ProjectsService {
   private readonly store = new Map<string, Project>();
 
   private read(id: string): Promise<Project | undefined> {
-    // e.g. this.drizzle.db.select().from(projects).where(eq(projects.id, id)).then((r) => r[0])
+    // Swap for a Drizzle select-by-id once templatecentral:add (database) has run.
     return Promise.resolve(this.store.get(id));
   }
 
   private write(project: Project): Promise<Project> {
-    // e.g. this.drizzle.db.insert(projects).values(project).returning().then((r) => r[0])
+    // Swap for a Drizzle insert with .returning() once templatecentral:add (database) has run.
     this.store.set(project.id, project);
     return Promise.resolve(project);
   }

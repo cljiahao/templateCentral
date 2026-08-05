@@ -42,7 +42,7 @@ INTERNAL_SERVER_ERROR_DETAIL = "Internal server error"
 
 def _sanitize_errors(errors: Sequence[Any]) -> dict[str, list[str]]:
     """Convert Pydantic validation errors to field-level format.
-    
+
     Returns:
       Dict mapping field names to lists of error messages.
     """
@@ -50,7 +50,7 @@ def _sanitize_errors(errors: Sequence[Any]) -> dict[str, list[str]]:
     for err in errors:
         loc = err.get('loc', [])
         msg = err.get('msg', 'Invalid value')
-        
+
         # loc is a tuple like ('body', 'email') or ('body', 'user', 'email').
         # Skip the first segment ('body', 'query', 'path') and join the rest with '.'
         # so nested schemas produce 'user.email' rather than just 'email'.
@@ -60,11 +60,11 @@ def _sanitize_errors(errors: Sequence[Any]) -> dict[str, list[str]]:
             field_name = str(loc[0])
         else:
             field_name = 'unknown'
-        
+
         if field_name not in field_errors:
             field_errors[field_name] = []
         field_errors[field_name].append(msg)
-    
+
     return field_errors
 
 
@@ -179,7 +179,6 @@ from fastapi import APIRouter, status
 
 from api.schemas.request.project import CreateProjectRequest
 from api.schemas.response.project import ProjectResponse
-from core.exceptions import InvalidInputError, NoResultsFound
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -196,7 +195,7 @@ async def get_project(project_id: str) -> ProjectResponse:
     raise NotImplementedError("Call the project service; raise NoResultsFound when the lookup returns nothing.")
 ```
 
-Replace each `raise NotImplementedError` with a call into the service layer. The service raises `InvalidInputError` for domain validation failures (→ 400) and `NoResultsFound` for missing records (→ 404); both are turned into the structured envelope by the handlers in Section 1.
+Replace each `raise NotImplementedError` with a call into the service layer. The router imports no exception types: the service raises `InvalidInputError` for domain validation failures (→ 400) and `NoResultsFound` for missing records (→ 404) from `core.exceptions`, and the handlers in Section 1 turn both into the structured envelope.
 
 **2b. Wiring (Already Present — No Changes Needed)**
 

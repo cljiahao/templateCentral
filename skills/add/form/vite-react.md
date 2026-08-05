@@ -47,10 +47,16 @@ the marker.
 ```typescript
 import { z } from 'zod';
 
+// One source of truth for the constraint, its error copy, and the field hint —
+// all three drift apart the moment the number is written out three times.
+export const MESSAGE_MIN_LENGTH = 10;
+
 export const contactFormSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   email: z.email({ error: 'Invalid email address' }),
-  message: z.string().min(10, 'Message must be at least 10 characters'),
+  message: z
+    .string()
+    .min(MESSAGE_MIN_LENGTH, `Message must be at least ${MESSAGE_MIN_LENGTH} characters`),
 });
 
 export type ContactFormValues = z.input<typeof contactFormSchema>;
@@ -75,6 +81,7 @@ import { CustomFormField } from '@/components/widgets';
 
 import {
   contactFormSchema,
+  MESSAGE_MIN_LENGTH,
   type ContactFormValues,
 } from '../schemas/contact.schema';
 
@@ -106,7 +113,11 @@ export function ContactForm() {
           <Input type="email" placeholder="you@example.com" />
         </CustomFormField>
 
-        <CustomFormField name="message" label="Message" description="Minimum 10 characters.">
+        <CustomFormField
+          name="message"
+          label="Message"
+          description={`Minimum ${MESSAGE_MIN_LENGTH} characters.`}
+        >
           <Textarea placeholder="Your message..." />
         </CustomFormField>
 

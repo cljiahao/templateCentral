@@ -234,7 +234,7 @@ export function LoginCard() {
   };
 
   const handleDevLogin = () => {
-    login({ id: 'dev', name: 'Dev User', email: 'dev@local' });
+    login(DEV_USER);
     navigate(PAGE_ROUTES.DASHBOARD);
   };
 

@@ -102,11 +102,16 @@ import { z } from 'zod';
 const paramsSchema = z.object({ id: z.uuid() });
 
 export function ProjectDetailPage() {
-  const parsed = paramsSchema.safeParse(useParams());
+  // Call every hook before the first conditional return. Inlining useParams() into
+  // the safeParse argument works today, but the guard below then sits above any
+  // useQuery/useEffect a later edit adds — which breaks the Rules of Hooks silently.
+  const params = useParams();
+  const parsed = paramsSchema.safeParse(params);
+
   if (!parsed.success) return <NotFoundPage />;
 
   const { id } = parsed.data;
-  // `id` is now a validated string — safe to pass to a service call.
+  // Pass the validated `id` to a service call and render the result here.
 }
 ```
 
