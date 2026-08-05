@@ -836,7 +836,7 @@ allowed-tools: Bash(pnpm *)
 Run all quality checks in sequence:
 
 ```bash
-pnpm exec tsc --noEmit --incremental && pnpm check && pnpm test --run
+pnpm exec tsc --noEmit --incremental && pnpm check && pnpm test
 ```
 
 Report failures with the exact error output. Fix before proceeding.

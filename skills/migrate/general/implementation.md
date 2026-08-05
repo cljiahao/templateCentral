@@ -295,9 +295,9 @@ Create the stack-specific verify skill in `.claude/skills/` only if it does not 
 
 | Stack | Skill file | Command |
 |-------|-----------|---------|
-| nextjs | `.claude/skills/next-verify/SKILL.md` | `pnpm exec tsc --noEmit --incremental && pnpm check && pnpm test --run` |
-| nestjs | `.claude/skills/nest-verify/SKILL.md` | `pnpm exec tsc --noEmit --incremental && pnpm check && pnpm test --run` |
-| vite-react | `.claude/skills/vite-verify/SKILL.md` | `pnpm exec tsc --noEmit --incremental && pnpm check && pnpm test --run` |
+| nextjs | `.claude/skills/next-verify/SKILL.md` | `pnpm exec tsc --noEmit --incremental && pnpm check && pnpm test` |
+| nestjs | `.claude/skills/nest-verify/SKILL.md` | `pnpm exec tsc --noEmit --incremental && pnpm check && pnpm test` |
+| vite-react | `.claude/skills/vite-verify/SKILL.md` | `pnpm exec tsc --noEmit --incremental && pnpm check && pnpm test` |
 | fastapi | `.claude/skills/api-verify/SKILL.md` | `python -m pyright src/ && ruff check src/ && python -m pytest test/ -q` |
 
 Template for TypeScript stacks (replace `<stack>` and `<command>`):
