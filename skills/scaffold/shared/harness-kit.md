@@ -247,8 +247,8 @@ case "$rel" in
 esac
 if [ -n "$reason" ]; then
   # Emit permissionDecision "ask" so Claude Code prompts for human approval before the write.
-  # (The old `exit 1` + stderr was NON-blocking on PreToolUse — the edit went through and the
-  # warning never reached the model. "ask" actually gates the write.)
+  # (`exit 1` + stderr is NON-blocking on PreToolUse — the edit goes through and the warning
+  # never reaches the model. Only "ask" actually gates the write.)
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"PROTECTED FILE: %s — %s. Confirm human approval and note it in the PR."}}\n' "$rel" "$reason"
   exit 0
 fi
@@ -309,8 +309,8 @@ case "$rel" in
 esac
 if [ -n "$reason" ]; then
   # Emit permissionDecision "ask" so Claude Code prompts for human approval before the write.
-  # (The old `exit 1` + stderr was NON-blocking on PreToolUse — the edit went through and the
-  # warning never reached the model. "ask" actually gates the write.)
+  # (`exit 1` + stderr is NON-blocking on PreToolUse — the edit goes through and the warning
+  # never reaches the model. Only "ask" actually gates the write.)
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"PROTECTED FILE: %s — %s. Confirm human approval and note it in the PR."}}\n' "$rel" "$reason"
   exit 0
 fi
@@ -1471,7 +1471,7 @@ sha256_regenh=$(shasum -a 256 .claude/regen-harness.sh | cut -d' ' -f1)
 **`.claude/harness.json`** (substitute stack name, verify-skill path, and computed hashes):
 ```json
 {
-  "templatecentral_version": "5.13.0",
+  "templatecentral_version": "5.14.0",
   "stack": "<stack>",
   "seeded_at": "<ISO-date>",
   "seeded_files": {
