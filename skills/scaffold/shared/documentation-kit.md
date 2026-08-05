@@ -83,7 +83,7 @@ open(p,"w").write(json.dumps(j,indent=2)+"\n")'
 2. If `$existing` is `true` or `false`, use it. Do not ask the user again — the field already records their answer.
 3. If `$existing` is empty (field unset — first time this kit runs on this project) **and an interactive user is available to ask**, ask exactly once, worded around:
 
-   > Does this project publish its repo to an Azure DevOps Code Wiki? If yes, I'll also maintain a `.order` file per folder so the wiki tree renders correctly — a parent folder with only subfolders and no file of its own shows up blank otherwise. (yes/no)
+   > Does this project publish its repo to an Azure DevOps Code Wiki? If yes, I'll also maintain a `.order` file per folder (so the wiki tree renders correctly) and a `<folder-name>.md` sibling file next to each folder (so that folder's own wiki page shows real content instead of a blank cover page) — this works whether you consume it via native "Publish code as wiki" or a manual/provisioned-wiki import. (yes/no)
 
    **No interactive user available** (a headless/automated invocation — e.g. a CI-driven scaffold, or an agent run with no human to answer): default to `false` and note the assumption in the Step 5 report (e.g. `adoWiki: defaulted to false — no interactive session available`), rather than hanging or guessing silently.
 
@@ -268,13 +268,18 @@ If a `README.md` already exists for a non-root folder and its structural section
 
 ---
 
-## Step 4. `.order` files (only if adoWiki is true)
+## Step 4. `.order` files and wiki-page promotion files (only if adoWiki is true)
 
-**Gate:** run this step only when `read_adowiki` returns `true`. If it returns `false` (or the Step 1 guard skipped Step 1 entirely because `.claude/harness.json` didn't exist), skip Step 4 in its entirety — do not write, update, or delete any `.order` file.
+**Gate:** run this step only when `read_adowiki` returns `true`. If it returns `false` (or the Step 1 guard skipped Step 1 entirely because `.claude/harness.json` didn't exist), skip Step 4 in its entirety — do not write, update, or delete any `.order` file or promotion file.
 
-When `adoWiki` is true, write a `.order` file into every folder from the Step 2 working set (including the repo root). Azure DevOps Code Wiki uses `.order` to decide sibling ordering and — critically — to render a parent page for folders that contain only subfolders and no file of their own (without it, such a folder renders blank in the wiki tree).
+This step produces two kinds of artifact, both needed because Azure DevOps Wiki has more than one way to consume a repo, and they don't behave the same way:
 
-**`.order` contents, one entry per line, extension stripped:**
+- **Native "Publish code as wiki"** auto-generates a page for every folder from the repo's actual structure — `.order` alone is enough to fix sibling ordering and stop an empty parent folder (subfolders only, no file of its own) from rendering blank.
+- **A manual or provisioned-wiki import** (e.g. copying pages in one at a time, or a third-party upload tool) does not auto-nest from folder structure. To make a folder's own page show real content — under either consumption path — Azure DevOps needs a Markdown file with the **same name as the folder**, sitting as its **sibling** in the parent directory, not a file inside it. `README.md` living inside `components/` satisfies the first path but not this one.
+
+### 4a. `.order` files
+
+Write a `.order` file into every folder from the Step 2 working set (including the repo root). **Contents, one entry per line, extension stripped:**
 
 1. `README` first (always — it is the folder's own wiki page).
 2. Every other immediate child (file or subfolder) next, in alphabetical order, with its extension stripped (`architecture.md` → `architecture`, `utils/` → `utils`).
@@ -288,7 +293,15 @@ components
 utils
 ```
 
-Regenerate `.order` alongside its folder's `README.md` in Step 3 (same pass) so the two never drift out of sync with the folder's actual current contents.
+### 4b. Folder-promotion files
+
+For every **non-root** folder in the Step 2 working set, write `<folder-name>.md` as a sibling of that folder (i.e. inside the *parent* directory, next to the folder — not inside it). Its content is a **byte-identical copy** of that folder's own `README.md` (written in Step 3) — no separate template, no independent drift, since it's a straight copy of content that's already accurate.
+
+**Collision safety:** if `<folder-name>.md` already exists at that sibling path and its content is neither an exact copy of the folder's current `README.md` nor a copy from a prior run of this step, treat it as foreign, human-authored content — do not overwrite it. Skip and flag it in the Step 5 report instead, the same soft-protect posture the rest of this convention takes toward existing content.
+
+The repo root has no parent directory to sit beside, so it never gets a promotion file — only Step 4a's root `.order` applies there.
+
+Regenerate both `.order` (4a) and the promotion-file copy (4b) alongside their folder's `README.md` in Step 3 (same pass) so none of the three ever drift out of sync with the folder's actual current contents.
 
 ---
 
@@ -306,13 +319,15 @@ If `richReadme` is true, append `(rich mode)` to that same line instead of print
 README.md: N created, M updated, K unchanged (rich mode)
 ```
 
-If `adoWiki` is true, append a line:
+If `adoWiki` is true, append lines for both Step 4 artifacts, plus a usage note and any promotion-file conflicts found:
 
 ```
 .order: J written
+wiki-page promotion files: P written (Q skipped — pre-existing foreign content: <path>, <path>)
+Import with Repos → Wikis → Publish code as wiki pointed at this branch/root, or via a manual/provisioned-wiki import — folder pages now carry real content either way.
 ```
 
-Omit the `.order` line entirely when `adoWiki` is false or Step 4 was skipped.
+Omit the `(Q skipped — ...)` clause when no conflicts were found. Omit all `.order`/promotion-file/usage-note lines entirely when `adoWiki` is false or Step 4 was skipped.
 
 If Step 1a defaulted `adoWiki` to `false` because no interactive user was available, append a line noting the assumption:
 
