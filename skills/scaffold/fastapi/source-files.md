@@ -311,7 +311,7 @@ def configure_exceptions(app: FastAPI) -> None:
             errors=safe_errors,
         )
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content={"detail": safe_errors},
         )
 
@@ -337,11 +337,15 @@ def configure_exceptions(app: FastAPI) -> None:
 from typing import Any
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class CommonSettings(BaseSettings):
     """Common settings for the application."""
+
+    # Read src/.env directly rather than relying on main.py's load_dotenv(): the Docker
+    # entrypoints run `uvicorn app:app --app-dir src`, which never executes main.py.
+    model_config = SettingsConfigDict(env_file="src/.env", extra="ignore")
 
     PROJECT_NAME: str = Field(default="My Project")
     PROJECT_VERSION: str = Field(default="v1.0.0")
@@ -359,6 +363,8 @@ class CommonSettings(BaseSettings):
 
 class APISettings(BaseSettings):
     """API-specific settings."""
+
+    model_config = SettingsConfigDict(env_file="src/.env", extra="ignore")
 
     FASTAPI_ROOT: str = Field(default="")
     API_PORT: int = Field(default=8000)
@@ -443,7 +449,7 @@ _SENSITIVE_KEYS = {
 def _redact_sensitive(
     _logger: Any, _method_name: str, event_dict: dict[str, Any]
 ) -> dict[str, Any]:
-    """Redact sensitive values by key, recursing into nested dicts (parity with pino's `*.token`)."""
+    """Redact sensitive values by key, recursing into nested dicts and sequences (parity with pino's `*.token`)."""
 
     def scrub(value: Any) -> Any:
         if isinstance(value, dict):
@@ -451,6 +457,8 @@ def _redact_sensitive(
                 k: ("***" if k.lower() in _SENSITIVE_KEYS else scrub(v))
                 for k, v in value.items()
             }
+        if isinstance(value, (list, tuple)):
+            return [scrub(v) for v in value]
         return value
 
     return scrub(event_dict)
@@ -539,7 +547,10 @@ def setup_logging() -> None:
         file_formatter = make_formatter(
             [structlog.processors.format_exc_info, structlog.processors.JSONRenderer()]
         )
-        for filename, level in (("info.log", logging.INFO), ("errors.log", logging.ERROR)):
+        for filename, level in (
+            ("info.log", logging.INFO),
+            ("errors.log", logging.ERROR),
+        ):
             file_handler = MyTimedRotatingFileHandler(
                 filename=str(dm.log_dir / filename),
                 when="midnight",
@@ -560,7 +571,9 @@ def setup_logging() -> None:
 # every line for that request automatically. Structured fields are passed as kwargs
 # (logger.info("Event", key=value)), NOT via stdlib's extra={...}.
 setup_logging()
-logger: structlog.stdlib.BoundLogger = structlog.stdlib.get_logger(common_settings.ENVIRONMENT)
+logger: structlog.stdlib.BoundLogger = structlog.stdlib.get_logger(
+    common_settings.ENVIRONMENT
+)
 ```
 
 ### `src/core/directory_manager.py`
@@ -955,9 +968,8 @@ def create_example_request(
 """Tests for the example endpoint."""
 
 import pytest
-from fastapi.testclient import TestClient
-
 from factories.models import create_example_request
+from fastapi.testclient import TestClient
 
 
 @pytest.mark.unit
@@ -1083,7 +1095,12 @@ def test_sensitive_keys_are_redacted_recursively() -> None:
 
 ### 1. Create target directory and write all files
 
-Create `<target-directory>/` and write every file listed in the Directory Structure above. Use verbatim content from Parts B and C exactly. Write `requirements-dev.txt` verbatim from Part B (config-files.md). Generate `README.md` per conventions. Do NOT create `requirements.txt` yet — it is produced by `pip freeze` in Step 4.
+Create `<target-directory>/` and write, verbatim:
+
+- From Part B (`config-files.md`): `Dockerfile`, `docker-entrypoint.sh`, `.dockerignore`, `.gitignore`, `.env.example`, `pyproject.toml`, `pyrightconfig.json`, `requirements-dev.txt`.
+- From Part C (this file): every `###`-headed source file above, at the path given in its heading.
+
+Do NOT create `requirements.txt` yet — it is produced by `pip freeze` in Step 4. Do NOT create `README.md` here — the documentation kit generates it later (Step E3).
 
 ### 2. Update project settings
 
@@ -1108,9 +1125,12 @@ python -m venv .venv
 source .venv/bin/activate   # Linux/Mac
 
 pip install "fastapi>=0.136" "uvicorn[standard]" "pydantic>=2.9.0" pydantic-settings python-dotenv python-multipart "structlog>=25.1" "starlette>=1.0.1"
-pip install -r requirements-dev.txt
 
+# Freeze BEFORE dev deps are installed — requirements.txt is what the Dockerfile's
+# prod-deps stage installs, so it must contain runtime packages only.
 pip freeze > requirements.txt
+
+pip install -r requirements-dev.txt
 ```
 
 **Checkpoint**: Run `pip check` to detect dependency conflicts. Fix before proceeding.

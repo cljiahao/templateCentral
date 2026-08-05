@@ -80,6 +80,16 @@ import { appConfig } from './config';
         level: process.env.LOG_LEVEL ?? 'info',
         // correlation ID
         genReqId: () => crypto.randomUUID(),
+        // pino-http's default serializer logs the whole headers object at info level.
+        // Without this, every request writes its bearer JWT and session cookies to the log.
+        redact: {
+          paths: [
+            'req.headers.authorization',
+            'req.headers.cookie',
+            'res.headers["set-cookie"]',
+          ],
+          remove: true,
+        },
         transport:
           appConfig.ENVIRONMENT !== 'prod' && appConfig.ENVIRONMENT !== 'uat'
             ? { target: 'pino-pretty', options: { singleLine: true } }
@@ -194,22 +204,54 @@ export function convertStrToList(
 ### `src/config/env.config.ts`
 
 ```typescript
+import { z } from 'zod';
+
+const envSchema = z.object({
+  PROJECT_NAME: z.string().min(1).default('My Project'),
+  PROJECT_DESCRIPTION: z
+    .string()
+    .min(1)
+    .default('API built with [NestJS](https://nestjs.com/) + Fastify'),
+  PROJECT_VERSION: z.string().min(1).default('0.1.0'),
+  ENVIRONMENT: z.enum(['dev', 'uat', 'prod']).default('dev'),
+  PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  CLIENT_URL: z.string().min(1).default('http://localhost:3000'),
+});
+
+// An empty value in `.env` means "not set" — drop it so the schema default applies.
+const rawEnv = Object.fromEntries(
+  Object.entries(process.env).filter(([, value]) => value !== ''),
+);
+
+const parsed = envSchema.safeParse(rawEnv);
+
+// Fail at import time. A `!` assertion is erased at compile time and would surface a
+// missing variable as an obscure runtime failure on the first request instead.
+if (!parsed.success) {
+  throw new Error(
+    `Invalid environment configuration:\n${z.prettifyError(parsed.error)}`,
+  );
+}
+
+const env = parsed.data;
+
 export const appConfig = {
-  PROJECT_NAME: process.env.PROJECT_NAME || 'My Project',
-  PROJECT_DESCRIPTION:
-    process.env.PROJECT_DESCRIPTION ||
-    'API built with [NestJS](https://nestjs.com/) + Fastify',
-  PROJECT_VERSION: process.env.PROJECT_VERSION || '0.1.0',
-  ENVIRONMENT: process.env.ENVIRONMENT || 'dev',
-  PORT: Number.isFinite(parseInt(process.env.PORT ?? '', 10))
-    ? parseInt(process.env.PORT!, 10)
-    : 3000,
+  PROJECT_NAME: env.PROJECT_NAME,
+  PROJECT_DESCRIPTION: env.PROJECT_DESCRIPTION,
+  PROJECT_VERSION: env.PROJECT_VERSION,
+  ENVIRONMENT: env.ENVIRONMENT,
+  PORT: env.PORT,
 };
 
 export const serviceConfig = {
-  CLIENT_URL: (process.env.CLIENT_URL || 'http://localhost:3000').split(','),
+  CLIENT_URL: env.CLIENT_URL.split(',').map((url) => url.trim()),
 };
 ```
+
+> **Extending this schema**: when a `templatecentral:add` capability introduces a new
+> environment variable (`DATABASE_URL`, `JWT_SECRET`, …), prefer adding the field to
+> `envSchema` and reading it off `env` over a bare `process.env.X!`. The `!` is erased at
+> compile time and never throws, so validation belongs here where boot fails loudly.
 
 ### `src/config/index.ts`
 
@@ -219,13 +261,17 @@ export * from './setups/swagger.setup';
 export * from './setups/security.setup';
 ```
 
+> Files under `config/setups/` import from `'../env.config'` directly, never from this
+> barrel — going through `index.ts` would form a cycle (`index` → `setups/*` → `index`)
+> that only resolves by accident of re-export ordering.
+
 ### `src/config/setups/security.setup.ts`
 
 ```typescript
 import fastifyHelmet from '@fastify/helmet';
 import type { INestApplication } from '@nestjs/common';
 import type { FastifyInstance } from 'fastify';
-import { serviceConfig } from '..';
+import { serviceConfig } from '../env.config';
 
 export async function setupSecurity(app: INestApplication): Promise<void> {
   const fastify = app.getHttpAdapter().getInstance() as FastifyInstance;
@@ -278,7 +324,7 @@ export function setupCors(app: INestApplication): void {
 import { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { cleanupOpenApiDoc } from 'nestjs-zod';
-import { appConfig } from '..';
+import { appConfig } from '../env.config';
 
 export function setupSwagger(app: INestApplication): void {
   if (appConfig.ENVIRONMENT === 'prod' || appConfig.ENVIRONMENT === 'uat')
@@ -706,13 +752,14 @@ chmod +x docker-entrypoint.sh
 
 In `package.json`, set `"name"` to the project name (kebab-case).
 
-In `src/config/env.config.ts`, update the fallback defaults:
+In `src/config/env.config.ts`, update the schema defaults:
 
 ```typescript
-PROJECT_NAME: process.env.PROJECT_NAME || '<Project Name>',
-PROJECT_DESCRIPTION:
-  process.env.PROJECT_DESCRIPTION ||
-  'API built with [NestJS](https://nestjs.com/) + Fastify',
+PROJECT_NAME: z.string().min(1).default('<Project Name>'),
+PROJECT_DESCRIPTION: z
+  .string()
+  .min(1)
+  .default('API built with [NestJS](https://nestjs.com/) + Fastify'),
 ```
 
 In `.env.example`, update:

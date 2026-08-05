@@ -220,7 +220,7 @@ Load and follow the NestJS auth skill in `../[project-name]-api`:
 cat "<skill-dir>/../add/auth/nestjs.md"
 ```
 
-**Important:** `proxy.ts` remains in the Next.js project — it continues to protect frontend routes at the edge. After migration, update any hardcoded Next.js `/api/auth/...` paths in `proxy.ts` to use `process.env.NEXT_PUBLIC_API_URL`.
+**Important:** `proxy.ts` remains in the Next.js project — it continues to protect frontend routes at the edge. After migration, update any hardcoded Next.js `/api/auth/...` paths in `proxy.ts` to use `process.env.BACKEND_URL` — `proxy.ts` runs server-side on the Node runtime, so it must read the unprefixed var. `NEXT_PUBLIC_*` values are embedded in the client bundle and must never carry the real backend address.
 
 ---
 

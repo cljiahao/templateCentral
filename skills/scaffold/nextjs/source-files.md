@@ -576,6 +576,27 @@ export function BrandLogo({ className }: BrandLogoProps) {
 }
 ```
 
+### `public/image_assets/logo.svg`
+
+> **Required.** `BrandLogo` resolves this path at build time, and the Dockerfile copies `public/` into the runner stage — the build fails outright if `public/` does not exist. This is a placeholder; the user replaces it with their own logo.
+
+```svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Logo">
+  <rect width="64" height="64" rx="14" fill="#6366f1" />
+  <path d="M20 40 L32 20 L44 40 Z" fill="#ffffff" />
+</svg>
+```
+
+### `public/image_assets/default-square.svg`
+
+> **Required.** Default `src` for `FloatingShape` — see the note above on why `public/` must exist.
+
+```svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Decorative square">
+  <rect x="8" y="8" width="48" height="48" rx="10" fill="#a5b4fc" />
+</svg>
+```
+
 ### `src/components/widgets/brand-text.tsx`
 
 > **Note:** After writing this file, update the text content to match the actual project name. Replace `template` and `Central` with the project's brand name split appropriately, or simplify to a single `<span>` if no gradient split is needed.
@@ -814,7 +835,7 @@ export class APIError extends Error {
 ### `src/integrations/clients/base/https-agent.ts`
 
 ```ts
-import https from 'https';
+import https from 'node:https';
 
 export interface HttpsAgentOptions {
   cert?: string | Buffer;
@@ -906,6 +927,9 @@ export abstract class FetchClient {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
+      // Node's fetch has no default timeout — an unresponsive upstream would pin
+      // the calling route handler open indefinitely without this.
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!res.ok) {
@@ -1197,7 +1221,11 @@ export default function RootLayout({
 }
 ```
 
-### `src/app/api/route.ts`
+### `src/app/api/health/route.ts`
+
+> The single health endpoint. `/api/health` is the path the Dockerfile `HEALTHCHECK` probes and the
+> only one `templatecentral:add (auth)` puts in `PUBLIC_API_PREFIXES` — do not add a sibling handler
+> at `/api`, which would start returning 401 the moment auth lands.
 
 ```ts
 import { type NextRequest, NextResponse } from 'next/server';
@@ -1206,21 +1234,6 @@ import { withLogging } from '@/lib/utils/with-logging';
 
 // Every route handler is wrapped in withLogging — the base scaffold models the pattern
 // its own health checks depend on, and the lint gate (see AGENTS.md) enforces it.
-export const GET = withLogging(async (_req: NextRequest): Promise<NextResponse> => {
-  return NextResponse.json(
-    { status: 'ok', timestamp: new Date().toISOString() },
-    { status: 200 },
-  );
-});
-```
-
-### `src/app/api/health/route.ts`
-
-```ts
-import { type NextRequest, NextResponse } from 'next/server';
-
-import { withLogging } from '@/lib/utils/with-logging';
-
 export const GET = withLogging(async (_req: NextRequest): Promise<NextResponse> => {
   return NextResponse.json(
     { status: 'ok', timestamp: new Date().toISOString() },
@@ -1339,6 +1352,9 @@ import { type NextRequest } from 'next/server';
 // TRUST_PROXY: set to the number of trusted proxy hops in front of the app
 // (1 = ALB → App, 2 = ALB → Traefik → App); empty/unset = X-Forwarded-*
 // headers are not trusted. A hop count is truthy, so the checks below hold.
+// Callers MUST validate the resolved host against an ALLOWED_HOSTS set before using
+// this in any emitted URL (password reset links, OAuth callbacks, etc.) — this
+// function alone does not prevent Host header injection.
 export function getAppOrigin(request: NextRequest): string {
   const trustProxy = process.env.TRUST_PROXY;
   const proto = (trustProxy
@@ -1898,22 +1914,11 @@ export function SiteFooter({
 import { describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
 
-import { GET as getRootHealth } from '@/app/api/route';
 import { GET as getHealthPath } from '@/app/api/health/route';
 
 function makeRequest(url: string): NextRequest {
   return new NextRequest(url);
 }
-
-describe('GET /api (root health)', () => {
-  it('returns ok with 200', async () => {
-    const response = await getRootHealth(makeRequest('http://localhost/api'));
-    const data = await response.json();
-    expect(response.status).toBe(200);
-    expect(data.status).toBe('ok');
-    expect(data.timestamp).toBeDefined();
-  });
-});
 
 describe('GET /api/health (Docker / probe path)', () => {
   it('returns ok with 200', async () => {
@@ -2012,7 +2017,7 @@ Never commit `.env.local`.
 
 ### 5b. Run verification gate before generating AGENTS.md
 
-Do not generate AGENTS.md until this passes. Substitute `<stack>-verify` with the delta-table verify-skill name (e.g. `next-verify`).
+Do not generate AGENTS.md until this passes.
 
 ```bash
 pnpm format      # Run this once before pnpm check — normalizes any formatting drift from file creation

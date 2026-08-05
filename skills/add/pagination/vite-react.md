@@ -18,8 +18,8 @@ the marker.
 
 ```ts
 // src/hooks/use-pagination.ts
-import { useState, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
 
 interface UsePaginationOptions {
   initialPage?: number;
@@ -42,6 +42,11 @@ export function usePagination<T>(
     queryKey: [...queryKey, page],
     queryFn: () => fetchFn(page, pageSize),
     enabled,
+    // The page number is part of the queryKey, so every Next/Previous click is a
+    // cache miss. Without this, isPending flips true and the whole list unmounts
+    // and re-mounts on each click. keepPreviousData holds the previous page's rows
+    // on screen (with isFetching true) until the new page resolves.
+    placeholderData: keepPreviousData,
   });
 
   const goToPage = useCallback((newPage: number) => {
@@ -73,28 +78,39 @@ export function usePagination<T>(
 }
 ```
 
-**2. Projects List Component**
+**2. Export from the hooks barrel**
+
+Add to `src/hooks/index.ts` — shared hooks are always re-exported from the barrel:
+
+```ts
+export { usePagination } from './use-pagination';
+```
+
+**3. Projects List Component**
 
 ```tsx
 // src/features/projects/components/projects-list.tsx
-import { usePagination } from '@/hooks/use-pagination';
+import { Button } from '@/components/ui/button';
 import { fetchProjects, type ProjectItem } from '@/features/projects/api/projects';
+import { usePagination } from '@/hooks';
 
 export function ProjectsList() {
-  const { data, pagination, page, isPending, error, nextPage, prevPage } =
+  const { data, pagination, page, isPending, isFetching, error, nextPage, prevPage } =
     usePagination<ProjectItem>(['projects'], fetchProjects);
 
+  // isPending is true only for the very first load — with keepPreviousData a page
+  // change keeps the previous rows mounted and surfaces as isFetching instead.
   if (isPending) return <div>Loading...</div>;
   if (error) return <div>Failed to load projects.</div>;
 
   return (
     <div className="space-y-4">
-      <ul className="space-y-2">
+      <ul className={isFetching ? 'space-y-2 opacity-60 transition-opacity' : 'space-y-2'}>
         {data.map((project: ProjectItem) => (
-          <li key={project.id} className="border p-2 rounded">
+          <li key={project.id} className="rounded border p-2">
             <h3 className="font-bold">{project.name}</h3>
             {project.description && (
-              <p className="text-sm text-muted-foreground">{project.description}</p>
+              <p className="text-muted-foreground text-sm">{project.description}</p>
             )}
           </li>
         ))}
@@ -102,33 +118,23 @@ export function ProjectsList() {
 
       {pagination && (
         <div className="space-y-2">
-          <div className="flex gap-2 justify-between items-center">
-            <button
-              disabled={page === 1}
-              onClick={prevPage}
-              className="bg-primary text-primary-foreground rounded px-4 py-2 disabled:opacity-50"
-            >
+          <div className="flex items-center justify-between gap-2">
+            <Button onClick={prevPage} disabled={page === 1 || isFetching}>
               Previous
-            </button>
+            </Button>
 
             <span>
-              Page {pagination.page} of{' '}
-              {Math.ceil(pagination.total / pagination.limit)}
+              Page {pagination.page} of {Math.ceil(pagination.total / pagination.limit)}
             </span>
 
-            <button
-              disabled={!pagination.hasMore}
-              onClick={nextPage}
-              className="bg-primary text-primary-foreground rounded px-4 py-2 disabled:opacity-50"
-            >
+            <Button onClick={nextPage} disabled={!pagination.hasMore || isFetching}>
               Next
-            </button>
+            </Button>
           </div>
 
-          <div className="text-sm text-muted-foreground">
+          <div className="text-muted-foreground text-sm">
             Showing {(page - 1) * pagination.limit + 1} to{' '}
-            {Math.min(page * pagination.limit, pagination.total)} of{' '}
-            {pagination.total} results
+            {Math.min(page * pagination.limit, pagination.total)} of {pagination.total} results
           </div>
         </div>
       )}
@@ -137,13 +143,13 @@ export function ProjectsList() {
 }
 ```
 
-**3. API Client**
+**4. API Client**
 
 ```ts
 // src/features/projects/api/projects.ts
-import { z } from 'zod';
-import { APIError } from '@/lib/errors';
 import { getApiBaseUrl } from '@/lib/constants/env';
+import { APIError, logError } from '@/lib/errors';
+import { z } from 'zod';
 
 const projectItemSchema = z.object({
   id: z.string(),
@@ -175,19 +181,33 @@ export async function fetchProjects(
     throw new APIError({ statusCode: response.status, data: await response.json().catch(() => ({ message: 'Failed to fetch projects' })) });
   }
 
-  const json = await response.json();
+  const json: unknown = await response.json();
 
-  // The backend wraps list responses in an envelope:
-  // { data: { items: [...], pagination: { page, limit, total, hasMore } } }
-  const data = json.data;
+  // ADJUST TO YOUR BACKEND. This assumes list responses are wrapped in an envelope —
+  // { data: { items: [...], pagination: {...} } } — which is a convention, not a
+  // universal shape. If your API returns { items, pagination } directly, delete the
+  // unwrap and validate `json` itself; the schema is the contract either way.
+  const payload = unwrapEnvelope(json);
 
-  // Validate response shape
-  const parsed = paginatedProjectSchema.safeParse(data);
+  const parsed = paginatedProjectSchema.safeParse(payload);
   if (!parsed.success) {
-    throw new Error(`Invalid API response: ${JSON.stringify(z.flattenError(parsed.error).fieldErrors)}`);
+    // Field errors are a debugging aid, not a user-facing message — log them, and
+    // throw the generic APIError the rest of the app already knows how to render.
+    logError(
+      'fetchProjects: response failed schema validation',
+      new Error(JSON.stringify(z.flattenError(parsed.error).fieldErrors))
+    );
+    throw new APIError({
+      statusCode: 502,
+      data: { message: 'Received an unexpected response from the server.' },
+    });
   }
 
   return parsed.data;
+}
+
+function unwrapEnvelope(json: unknown): unknown {
+  return json && typeof json === 'object' && 'data' in json ? json.data : json;
 }
 ```
 
@@ -203,6 +223,14 @@ pnpm dev
 
 pnpm test
 ```
+
+## Rules
+
+- Always set `placeholderData: keepPreviousData` on a paginated query — without it every page click blanks the list
+- Drive loading/disabled UI off `isFetching` for page changes; `isPending` covers only the first load
+- Always throw `APIError`, never a generic `Error` — and never embed validation field errors in the thrown message; log them separately
+- Always add the hook to the `src/hooks/index.ts` barrel
+- Use the shadcn `Button` for pagination controls — never a raw `<button>`
 
 ## See Also
 

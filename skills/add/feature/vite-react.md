@@ -96,11 +96,14 @@ import { APIError } from '@/lib/errors';
 import { projectItemSchema } from '../schemas';
 import type { ProjectItem } from '../types';
 
-const API_BASE = getApiBaseUrl();
+// Resolved per-request, never at module scope: getApiBaseUrl() throws when
+// VITE_API_BASE_URL is unset, and a module-scope throw kills bundle evaluation
+// before createRoot() runs — a blank page with no ErrorBoundary to catch it.
+const apiBase = () => getApiBaseUrl();
 
 export const ProjectService = {
   getAll: async (): Promise<ProjectItem[]> => {
-    const res = await fetch(`${API_BASE}/projects`);
+    const res = await fetch(`${apiBase()}/projects`);
     if (!res.ok) {
       throw new APIError({ statusCode: res.status, data: await res.json().catch(() => ({ message: 'Failed to fetch projects' })) });
     }
@@ -108,7 +111,7 @@ export const ProjectService = {
   },
 
   getById: async (id: string): Promise<ProjectItem> => {
-    const res = await fetch(`${API_BASE}/projects/${id}`);
+    const res = await fetch(`${apiBase()}/projects/${encodeURIComponent(id)}`);
     if (!res.ok) {
       throw new APIError({ statusCode: res.status, data: await res.json().catch(() => ({ message: 'Project not found' })) });
     }

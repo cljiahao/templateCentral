@@ -156,7 +156,7 @@ open(p,"w").write(json.dumps(j,indent=2)+"\n")'
 
 ## Step 2. Enumerate folders
 
-Enumerate every project directory with a single portable `find` command, pruning dependency/build output and VCS/harness-internal directories so generated or vendored trees are never touched:
+Enumerate every project directory with a single portable `find` command, pruning dependency/build output, VCS/harness-internal directories, and every path the harness itself protects, so generated or vendored trees are never touched and the kit never tries to write a file `protect-files.sh` hard-blocks:
 
 ```bash
 find . \( \
@@ -176,9 +176,15 @@ find . \( \
     -name htmlcov -o \
     -name .stryker-tmp -o \
     -name .mutmut-cache -o \
+    -name .github -o \
+    -name secrets -o \
+    -name .secrets -o \
+    -name .claude -o \
     -path './.claude/.harness-base' \
   \) -prune -o -type d -print
 ```
+
+**Why `.github`, `secrets`, `.secrets`, and `.claude` are pruned:** `protect-files.sh` hard-blocks (exit 2) any write under `.github/workflows/`, `.github/actions/`, `secrets/`, and `.secrets/`, and gates most of `.claude/` behind human approval. Without these prunes the kit would try to create e.g. `.github/workflows/README.md`, be blocked, and leave the seeded `readme-freshness` CI gate permanently unsatisfiable for any PR that touches a workflow file — the gate demands a README the harness forbids anyone from creating.
 
 **Respect the project's own `.gitignore` too.** The prune list above only covers well-known dependency/build directories common across templateCentral's own scaffolds — it cannot anticipate every project-specific ignore pattern (e.g. a custom `log/` directory). After the `find` above, drop any remaining entry that the project itself ignores, so this kit never writes a `README.md` that's invisible to git, CI, and teammates. If no git repository exists yet (very early in a fresh scaffold, before `git init` has run), skip this filter entirely and rely on the hardcoded prune list alone — the check below degrades to a no-op filter (keeps everything) in that case, which is safe:
 
@@ -189,6 +195,7 @@ find . \( \
     -name coverage -o -name .turbo -o -name .venv -o -name __pycache__ -o \
     -name .pytest_cache -o -name .ruff_cache -o -name .mypy_cache -o -name .pyright -o \
     -name htmlcov -o -name .stryker-tmp -o -name .mutmut-cache -o \
+    -name .github -o -name secrets -o -name .secrets -o -name .claude -o \
     -path './.claude/.harness-base' \
   \) -prune -o -type d -print > "$tmp"
 
@@ -253,7 +260,7 @@ For every non-root folder, create or fully regenerate its `README.md` from this 
   - **`richReadme` false (default):** mechanical, not narrative — a manifest, not a summary. Do not add descriptive prose per bullet beyond the child's own name.
   - **`richReadme` true:** each bullet becomes `` `<child>` — <real one-line description> `` — the child's actual exported functions/components/constants, schemas, route handlers, or other genuinely defining behavior, taken from actually reading the file (per the Step 3 intro's read-before-you-write rule), never a restatement of the filename. Subfolders still just get their name (a subfolder's own `Purpose` covers it) — this only enriches file bullets. **Exception:** known lockfiles (`pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `poetry.lock`, `Cargo.lock`, etc.) and binary files (images, fonts, and other non-text formats) get a brief generic description (e.g. "locked dependency versions") without opening them — reading a multi-thousand-line lockfile or a binary asset cover-to-cover for one bullet isn't worth the cost.
 - **Connectivity** — included only for folders that contain subfolders. Say how the subfolders relate to each other and to the parent (data flow, layering, dependency direction) — not what each one does individually (that's each subfolder's own `Purpose`).
-  - **`richReadme` false (default):** capped at 2-4 sentences. This cap is a safe-by-default choice, not a mitigation for the agent-performance regression an ETH Zurich study measured for verbose per-folder AI context — that study evaluates AGENTS.md-style files, which are forced into every agent task's context regardless of relevance; a per-folder `README.md` is opened on demand, only when an agent chooses to navigate there — much closer to how a human uses documentation — so that finding doesn't directly transfer here. The real risk this cap manages is staleness: a detailed claim about what subfolders do or how they relate goes silently wrong the moment the code changes without the README following — exactly what the `readme-coupling` lefthook check and `readme-freshness` CI job (`scaffold/shared/harness-kit.md`) exist to catch. Capping the default keeps that risk low for projects that may not keep that enforcement airtight.
+  - **`richReadme` false (default):** capped at 2-4 sentences. The risk this cap manages is staleness: a detailed claim about what subfolders do or how they relate goes silently wrong the moment the code changes without the README following — exactly what the `readme-coupling` lefthook check and `readme-freshness` CI job (`scaffold/shared/harness-kit.md`) exist to catch. Capping the default keeps that risk low for projects that may not keep that enforcement airtight.
   - **`richReadme` true:** no sentence cap — write real cross-file relationships, as deep as genuinely useful. Still relational information only (how subfolders connect), not restating each child's own `Purpose`. This is the escape hatch for projects that do keep `readme-coupling`/`readme-freshness` enforcement active and want documentation-kit's on-demand per-folder READMEs to carry more than a structural skim.
 - **Parent** — a relative link to the immediate parent's `README.md` (always `../README.md`, since Parent is always one level up).
 

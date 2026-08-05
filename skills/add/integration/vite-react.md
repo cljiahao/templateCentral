@@ -56,18 +56,19 @@ export type GithubRepo = z.infer<typeof githubRepoSchema>;
 
 Extend the base `FetchClient` (at `src/lib/clients/fetch-client.ts`) which handles response parsing, error mapping, and content-type negotiation:
 
+The client returns `unknown`, not the schema type. Nothing has been validated at this layer — a `request<GithubRepo[]>` annotation would be a type assertion over untrusted network data, and any caller reaching for the client directly would get a compile-time guarantee the runtime does not back. `unknown` makes the trust boundary explicit: the value is unusable until the service `parse()`s it.
+
 ```ts
 // src/integrations/clients/github-client.ts
 import { FetchClient } from '@/lib/clients/fetch-client';
-import type { GithubRepo } from '../schemas/github-schemas';
 
 export class GithubClient extends FetchClient {
-  async getRepos() {
-    return this.request<GithubRepo[]>('user/repos');
+  async getRepos(): Promise<unknown> {
+    return this.request<unknown>('user/repos');
   }
 
-  async getRepo(owner: string, repo: string) {
-    return this.request<GithubRepo>(`repos/${owner}/${repo}`);
+  async getRepo(owner: string, repo: string): Promise<unknown> {
+    return this.request<unknown>(`repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`);
   }
 }
 ```
@@ -148,6 +149,7 @@ Confirm the build succeeds with no type errors and all tests pass. Verify the in
 ### Rules
 
 - Clients are thin — they only make HTTP requests; NEVER put business logic in clients
+- Client methods return `unknown` — the schema type is earned by `parse()` in the service, never asserted in the client
 - Schemas validate external responses with Zod — external data is untrusted; NEVER skip Zod validation on external API responses
 - Services contain business logic and call clients
 - NEVER hardcode API URLs or secrets — centralize in `src/lib/constants/env.ts`

@@ -116,14 +116,11 @@ export function ContactForm() {
     },
   });
 
-  const onSubmit = (values: ContactFormValues) => {
-    try {
-      throw new Error(
-        `TODO: wire up your submit handler (server action / API call) with payload: ${JSON.stringify(values)}`,
-      );
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Submission failed.');
-    }
+  // Must stay async — form.formState.isSubmitting only tracks a promise-returning handler,
+  // so the disabled/"Submitting..." state below never engages for a sync handler.
+  // Rename _values to values once the real server action / API call is wired in.
+  const onSubmit = async (_values: ContactFormValues) => {
+    toast.error('TODO: wire up submit');
   };
 
   return (
@@ -187,8 +184,9 @@ export default function ContactPage() {
 - Use `CustomFormField` for all fields — it handles label, error display, and Controller wiring automatically.
 - Use `Form` from `@/components/ui/form` to wrap the form — it re-exports `FormProvider` and `CustomFormField` uses `useFormContext()`.
 - Set `defaultValues` for all fields to avoid uncontrolled-to-controlled warnings.
-- Use `toast.success()` / `toast.error()` from Sonner for user feedback — install sonner and add `<Toaster />` to root layout first (see Step 1).
+- Use `toast.success()` / `toast.error()` from Sonner for user feedback — the scaffold already mounts `<Toaster />` in `src/components/layout/providers.tsx` (see Step 1).
 - For server actions (Next.js), handle submission in an async `onSubmit` that calls the server action directly.
+- **Client-side validation is not a security boundary.** `zodResolver` runs in the browser and any client can skip it entirely — a crafted request reaches the server action or route handler with arbitrary input. The server action / route handler MUST re-parse the same schema (`contactFormSchema.safeParse(values)`) and reject on failure before touching the database or any side effect. The client-side parse exists only to give the user immediate feedback.
 - Add `'use client'` directive — forms are inherently interactive.
 - For complex validation (file uploads, password rules, OWASP/CWE compliance): use `templatecentral:standards` (validation-patterns).
 

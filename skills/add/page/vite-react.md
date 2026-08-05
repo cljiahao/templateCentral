@@ -90,14 +90,41 @@ For dynamic segments:
 
 Access params in the page:
 
+Route params are user input — anything can be typed into the address bar. Validate the shape with Zod before it reaches a service call, exactly as you would an API response; a presence check (`!id`) is not validation.
+
 ```tsx
-import { useParams } from 'react-router';
 import { NotFoundPage } from '@/pages/not-found';
+import { useParams } from 'react-router';
+import { z } from 'zod';
+
+// Match the schema to the real id format — z.uuid() here, z.coerce.number().int().positive()
+// for numeric ids, z.enum([...]) for a fixed set.
+const paramsSchema = z.object({ id: z.uuid() });
 
 export function ProjectDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  if (!id) return <NotFoundPage />;
-  // ...
+  const parsed = paramsSchema.safeParse(useParams());
+  if (!parsed.success) return <NotFoundPage />;
+
+  const { id } = parsed.data;
+  // `id` is now a validated string — safe to pass to a service call.
+}
+```
+
+Query-string values need the same treatment — `useSearchParams` returns `string | null` for anything, so parse it rather than trusting it:
+
+```tsx
+import { useSearchParams } from 'react-router';
+import { z } from 'zod';
+
+const searchSchema = z.object({
+  page: z.coerce.number().int().min(1).catch(1),
+  status: z.enum(['active', 'archived']).catch('active'),
+});
+
+export function ProjectListPage() {
+  const [searchParams] = useSearchParams();
+  const { page, status } = searchSchema.parse(Object.fromEntries(searchParams));
+  // `page` and `status` are validated — `.catch()` falls back instead of throwing on junk input.
 }
 ```
 
@@ -159,6 +186,7 @@ Confirm the build succeeds with no type errors and all tests pass.
 - Always add the `<Route>` in `src/router.tsx` — the page won't be accessible otherwise
 - Protected pages MUST be nested inside `<Route element={<ProtectedRoute />}>` in `src/router.tsx` — otherwise unauthenticated users can access them
 - Use layout routes for shared navigation/chrome
+- Always validate `useParams` / `useSearchParams` values with Zod before using them — they are user input, not trusted data; a `!id` presence check is not validation
 - NEVER hardcode route paths in components — use `PAGE_ROUTES` constants
 - NEVER create deeply nested route files — keep pages flat in `src/pages/`; nesting is in the router
 

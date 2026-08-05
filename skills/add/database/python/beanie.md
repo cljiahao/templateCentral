@@ -121,6 +121,9 @@ Beanie documents are used directly — no session injection needed:
 Create Pydantic response schemas (in `api/schemas/`) and use `response_model`:
 
 ```python
+from beanie import PydanticObjectId
+from fastapi import HTTPException, status
+
 from api.schemas.request.user import CreateUserRequest  # create these schemas
 from api.schemas.response.user import UserResponse
 from core.security import hash_password
@@ -132,7 +135,14 @@ async def list_users():
 
 @router.get("/users/{user_id}", response_model=UserResponse)
 async def get_user(user_id: str):
-    return await User.get(user_id)
+    try:
+        oid = PydanticObjectId(user_id)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        ) from None
+    return await User.get(oid)
 
 @router.post("/users", response_model=UserResponse, status_code=201)
 async def create_user(payload: CreateUserRequest):
@@ -144,6 +154,8 @@ async def create_user(payload: CreateUserRequest):
     return user
 ```
 
+> **Unbounded query**: `User.find().to_list()` loads the entire collection into memory. Paginate it for real use — run `templatecentral:add` (pagination).
+>
 > **Important**: Never return raw Beanie documents directly — always use `response_model` with a Pydantic schema to control serialization and avoid leaking internal fields like `hashed_password`.
 
 ### B8. Validate

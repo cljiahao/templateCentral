@@ -44,7 +44,7 @@ src/features/
 ### Files this skill modifies
 
 ```
-.env.example                         ← adds BETTER_AUTH_SECRET, BETTER_AUTH_URL, NEXT_PUBLIC_APP_URL
+.env.example                         ← adds BETTER_AUTH_SECRET, BETTER_AUTH_URL, NEXT_PUBLIC_APP_NAME, NEXT_PUBLIC_APP_URL
 .env.local                           ← same vars (fill actual values)
 src/lib/constants/routes.ts          ← adds PAGE_ROUTES.LOGIN (HOME and DASHBOARD already exist from scaffold)
 AGENTS.md                            ← adds auth architecture notes
@@ -214,6 +214,11 @@ export async function proxy(req: NextRequest) {
   return NextResponse.next();
 }
 
+// Never configure a single-entry `i18n.locales` list — a high-severity security
+// advisory covers exactly that shape: a single-locale list under Turbopack can skip
+// the proxy entirely, so every auth check here silently stops running. If you add
+// i18n routing, re-verify the proxy still executes on every matched path.
+// See the Next.js floor in .claude/rules/nextjs.md.
 export const config = {
   matcher: [
     '/((?!_next/static|_next/image|.*\\.(?:svg|png|jpg|jpeg|gif|ico|webp)$).*)',
@@ -270,8 +275,12 @@ import type { ReactNode } from 'react';
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
   // Authoritative gate. proxy.ts only checks cookie presence to keep routing fast; this
-  // validates the session against the store. Without this, a forged cookie would pass
-  // the proxy and reach protected content.
+  // verifies the session's signature and, when the cookie cache is cold, revalidates it
+  // against the store. Without this, a forged cookie would pass the proxy and reach
+  // protected content. Note: with `cookieCache.enabled: true` (maxAge 5 min) this can be
+  // served from the signed cookie without touching the store, so revocation and lockout
+  // take effect only after that window — set `cookieCache.enabled: false` in
+  // src/lib/auth.ts for high-assurance flows that need immediate revocation.
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) {
     redirect(PAGE_ROUTES.LOGIN);
@@ -534,28 +543,38 @@ Uncomment the relevant block in `src/lib/auth.ts` and add credentials to `.env.l
 
 Full provider list: https://www.better-auth.com/docs/authentication/social-sign-on
 
-> **OIDC provider (token issuer)**: If your project needs to act as an OIDC provider (issuing tokens to third-party clients), use `@better-auth/oauth-provider` — the `oidc-provider` plugin has been removed. See: https://www.better-auth.com/docs/plugins/oauth-provider
+> **OIDC provider (token issuer)**: If your project needs to act as an OIDC provider (issuing tokens to third-party clients), use `@better-auth/oauth-provider` — the `oidc-provider` plugin is deprecated for removal in an upcoming release, so migrate to `@better-auth/oauth-provider`. See: https://www.better-auth.com/docs/plugins/oauth-provider
 
 ### Rate Limiting (Required for Production)
 
-Industry best practice: max 3 failed auth attempts per 15 minutes. better-auth does not include built-in rate limiting — add it at the infrastructure layer (CDN/WAF/API Gateway) or in `proxy.ts` middleware using `@upstash/ratelimit` (Redis-backed, edge-compatible):
+Industry best practice: max 3 auth attempts per 15 minutes. better-auth does not include built-in rate limiting — add it at the infrastructure layer (CDN/WAF/API Gateway) or in `proxy.ts` middleware using `@upstash/ratelimit` (Redis-backed, edge-compatible):
 
 ```bash
 pnpm add @upstash/ratelimit @upstash/redis
 ```
 
-In `src/proxy.ts`, add a rate-limit check at the **top of `proxy()`**, before the public-route short-circuit. Placement matters: `/api/auth/sign-in/email` matches `PUBLIC_API_PREFIXES` (`/api/auth`), so the short-circuit returns `NextResponse.next()` before the auth call ever runs — a limiter placed after it would be unreachable.
+In `src/proxy.ts`, add a rate-limit check at the **top of `proxy()`**, before the public-route short-circuit. Placement matters: every `/api/auth/*` endpoint matches `PUBLIC_API_PREFIXES` (`/api/auth`), so the short-circuit returns `NextResponse.next()` before the auth call ever runs — a limiter placed after it would be unreachable.
 
 ```typescript
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 
-// Max 3 sign-in attempts per 15 minutes, per client IP
+// Max 3 attempts per 15 minutes, per client IP
 const ratelimit = new Ratelimit({
   redis: Redis.fromEnv(),
   limiter: Ratelimit.slidingWindow(3, '15 m'),
-  prefix: 'auth:sign-in',
+  prefix: 'auth:credentials',
 });
+
+// Every credential-accepting auth endpoint, not just sign-in: sign-up, password
+// reset and forgot-password are equally brute-forceable and all sit under the
+// /api/auth public prefix.
+const RATE_LIMITED_AUTH_PATHS = [
+  '/api/auth/sign-in',
+  '/api/auth/sign-up',
+  '/api/auth/forget-password',
+  '/api/auth/reset-password',
+];
 
 // TRUST_PROXY = number of trusted proxy hops (1 = ALB → App, 2 = ALB →
 // Traefik → App); empty/unset = X-Forwarded-For is not trusted.
@@ -577,7 +596,7 @@ function getRateLimitKey(req: NextRequest): string | null {
 // At the top of proxy(), immediately after `const { pathname } = req.nextUrl;`
 // and BEFORE the isPublicRoute() short-circuit (which would otherwise return
 // NextResponse.next() for /api/auth/* and skip this check entirely):
-if (req.nextUrl.pathname === '/api/auth/sign-in/email') {
+if (RATE_LIMITED_AUTH_PATHS.some((p) => req.nextUrl.pathname.startsWith(p))) {
   // Fail closed when no trustworthy client IP exists (TRUST_PROXY unset or
   // header missing): all such requests share one bucket, keeping the endpoint
   // throttled instead of wide open. Fix the deployment topology — never fall

@@ -141,19 +141,23 @@ Example for `src/app/api/projects/route.ts`:
 
 ```ts
 // test/api/projects/route.test.ts
-import { GET, POST } from '@/app/api/projects/route';
+import { NextRequest } from 'next/server';
 import { describe, expect, it } from 'vitest';
 
+import { GET, POST } from '@/app/api/projects/route';
+
+// withLogging-wrapped handlers are typed against NextRequest and always take the
+// request as their first argument — a plain Request or a zero-arg call is a type error.
 describe('GET /api/projects', () => {
   it('returns 200 and a list', async () => {
-    const response = await GET();
+    const response = await GET(new NextRequest('http://localhost/api/projects'));
     expect(response.status).toBe(200);
   });
 });
 
 describe('POST /api/projects', () => {
   it('returns 400 on invalid body', async () => {
-    const request = new Request('http://localhost/api/projects', {
+    const request = new NextRequest('http://localhost/api/projects', {
       method: 'POST',
       body: JSON.stringify({}),
       headers: { 'Content-Type': 'application/json' },

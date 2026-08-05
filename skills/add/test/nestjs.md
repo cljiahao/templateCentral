@@ -66,6 +66,12 @@ describe('MyController', () => {
     const result = controller.findAll();
     expect(Array.isArray(result)).toBe(true);
   });
+
+  // Controllers must stay thin — this asserts the controller delegates rather than
+  // computing its own result, without mocking the service (see Rules below).
+  it('should delegate to the service', () => {
+    expect(controller.findAll()).toEqual(service.findAll());
+  });
 });
 ```
 

@@ -70,6 +70,8 @@ RUN \
 # exists it is preferred; otherwise falls back to the same file as deps.
 # This venv is what ships in the final prod image.
 FROM base AS prod-deps
+# `requirements.txt` must contain runtime deps ONLY — it is frozen before
+# requirements-dev.txt is installed (see source-files.md Step 4; freeze order matters).
 COPY requirements*.txt pyproject.toml* uv.lock* setup.py* setup.cfg* ./
 RUN python -m venv .venv
 ENV PATH="${APP_DIR}/.venv/bin:${PATH}"

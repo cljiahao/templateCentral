@@ -115,15 +115,17 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 ```python
 from datetime import datetime, timedelta, timezone
 
+import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
-import jwt
 
 from core.config import api_settings
 
 ALGORITHM = "HS256"
 
-_ph = PasswordHasher()  # argon2id, OWASP-recommended defaults
+# argon2id with OWASP-recommended parameters — t=3, m=64 MiB, p=1.
+# Set explicitly: argon2-cffi's library defaults differ from these.
+_ph = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=1)
 
 
 def hash_password(password: str) -> str:

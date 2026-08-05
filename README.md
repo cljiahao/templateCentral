@@ -225,8 +225,8 @@ templatecentral/
 │   ├── review/              # (de-registered utility) code review + apply feedback
 │   └── cleanup/             # (de-registered utility) remove example code / task scaffolding
 ├── .claude/skills/          # Repo-internal contributor skills (NOT shipped to installs)
-│   ├── audit/               # /tc-audit — full ecosystem + accuracy audit
-│   └── write-skill/         # /tc-write-skill — skill authoring checklist
+│   ├── tc-audit/            # /tc-audit — full ecosystem + accuracy audit
+│   └── tc-write-skill/      # /tc-write-skill — skill authoring checklist
 ├── AGENTS.md                # Agent orchestration guide
 └── CHANGELOG.md             # Full version history
 ```

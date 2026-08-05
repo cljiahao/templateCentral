@@ -33,7 +33,7 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import { Kysely, PostgresDialect, sql } from 'kysely';
 import { Pool } from 'pg';
 
-import { serviceConfig } from '../config/env.config';
+import { appConfig, serviceConfig } from '../config/env.config';
 import type { Database } from './types';
 
 @Injectable()
@@ -44,6 +44,10 @@ export class KyselyService extends Kysely<Database> implements OnModuleInit, OnM
     const pool = new Pool({
       connectionString: serviceConfig.DATABASE_URL,
       max: 10,
+      // node-postgres does NOT negotiate TLS on its own. Without this the password and
+      // every row travel in plaintext. Local Docker Postgres serves no TLS, so it is
+      // disabled in dev only — never for a managed/remote database.
+      ssl: appConfig.ENVIRONMENT === 'dev' ? false : { rejectUnauthorized: true },
     });
 
     super({ dialect: new PostgresDialect({ pool }) });
@@ -65,6 +69,17 @@ export class KyselyService extends Kysely<Database> implements OnModuleInit, OnM
 }
 ```
 
+> **TLS against a managed Postgres.** `rejectUnauthorized: true` verifies the server
+> certificate against Node's default trust store. Providers whose certs chain to a public
+> CA (Neon, Supabase, most Azure/GCP endpoints) work as-is. **AWS RDS does not** — its
+> certs chain to the Amazon RDS root CA, which Node does not ship, so verification fails
+> with `SELF_SIGNED_CERT_IN_CHAIN`. Install the CA bundle as shown in the IAM variant
+> below rather than reaching for `rejectUnauthorized: false`, which disables
+> authentication entirely and leaves the connection open to MITM.
+>
+> Appending `?sslmode=require` to `DATABASE_URL` is **not** a substitute: `require` only
+> asks for encryption, it does not verify the server's identity.
+
 ##### IAM Auth Variant
 
 If the user requires AWS IAM authentication, install the additional package:
@@ -73,9 +88,27 @@ If the user requires AWS IAM authentication, install the additional package:
 pnpm add @aws-sdk/rds-signer
 ```
 
+**Download the AWS RDS CA bundle first.** RDS server certificates chain to the Amazon RDS
+root CA, which is not in Node's default trust store — without the bundle, TLS verification
+fails with `SELF_SIGNED_CERT_IN_CHAIN` and the tempting "fix" (`rejectUnauthorized: false`)
+silently downgrades the connection to unauthenticated TLS.
+
+```bash
+mkdir -p certs
+curl -fsSL -o certs/rds-global-bundle.pem \
+  https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+```
+
+Commit `certs/rds-global-bundle.pem` (it is a public certificate, not a secret) or bake it
+into the Docker image, and add `RDS_CA_BUNDLE_PATH=certs/rds-global-bundle.pem` to `.env`
+and `.env.example`. In a container, `NODE_EXTRA_CA_CERTS=/app/certs/rds-global-bundle.pem`
+is an equivalent process-wide alternative to the explicit `ca` option below.
+
 Replace the entire contents of `kysely.service.ts` with:
 
 ```typescript
+import { readFileSync } from 'node:fs';
+
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Kysely, PostgresDialect, sql } from 'kysely';
 import { Signer } from '@aws-sdk/rds-signer';
@@ -101,7 +134,12 @@ export class KyselyService extends Kysely<Database> implements OnModuleInit, OnM
       user: serviceConfig.DATABASE_USER,
       database: serviceConfig.DATABASE_NAME,
       password: () => signer.getAuthToken(),
-      ssl: { rejectUnauthorized: true },
+      // The `ca` is required: without the Amazon RDS root CA, `rejectUnauthorized: true`
+      // cannot build a chain and every connection fails with SELF_SIGNED_CERT_IN_CHAIN.
+      ssl: {
+        rejectUnauthorized: true,
+        ca: readFileSync(serviceConfig.RDS_CA_BUNDLE_PATH, 'utf8'),
+      },
       max: 10,
     });
 
@@ -135,6 +173,8 @@ export const serviceConfig = {
   DATABASE_PORT: Number(process.env.DATABASE_PORT ?? '5432'),
   DATABASE_USER: process.env.DATABASE_USER!,
   DATABASE_NAME: process.env.DATABASE_NAME!,
+  RDS_CA_BUNDLE_PATH:
+    process.env.RDS_CA_BUNDLE_PATH ?? 'certs/rds-global-bundle.pem',
 };
 ```
 
@@ -145,6 +185,7 @@ DATABASE_HOST=your-rds-instance.region.rds.amazonaws.com
 DATABASE_PORT=5432
 DATABASE_USER=iam_db_user
 DATABASE_NAME=mydb
+RDS_CA_BUNDLE_PATH=certs/rds-global-bundle.pem
 ```
 
 > IAM auth does not use a password — `@aws-sdk/rds-signer` generates a short-lived token automatically from the instance's IAM role.
@@ -272,7 +313,12 @@ async function migrate() {
   await db.destroy();
 }
 
-migrate();
+// Without the catch, a rejected promise leaves the exit code at 0 and CI reports a
+// failed migration as a passing step.
+migrate().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
 ```
 
 Run migrations with: `pnpm migrate`
@@ -408,6 +454,11 @@ import * as argon2 from 'argon2';
 import { KyselyService } from '../../database/kysely.service';
 import type { LoginDto, RegisterDto } from './auth.dto';
 
+// Verified on the miss path so an unknown email costs the same as a wrong
+// password — without it, response timing leaks which accounts exist.
+const DUMMY_HASH =
+  '$argon2id$v=19$m=65536,t=3,p=1$c29tZXNhbHRzb21lc2E$Rdo0OMHkQXBTOTBqNCn0mPvBGiLxvGBIbxKZ0nJ0Aqo';
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -439,7 +490,11 @@ export class AuthService {
       .selectAll()
       .where('email', '=', dto.email)
       .executeTakeFirst();
-    if (!user || !(await argon2.verify(user.hashed_password, dto.password))) {
+    const passwordOk = await argon2.verify(
+      user?.hashed_password ?? DUMMY_HASH,
+      dto.password,
+    );
+    if (!user || !passwordOk) {
       throw new UnauthorizedException('Invalid credentials.');
     }
     return {

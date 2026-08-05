@@ -14,7 +14,7 @@
   "description": "",
   "private": true,
   "license": "UNLICENSED",
-  "packageManager": "pnpm@11.10.0",
+  "packageManager": "pnpm@11.18.0",
   "engines": {
     "node": ">=24"
   },

@@ -23,7 +23,7 @@ All files use **kebab-case**. No exceptions (unlike Next.js, Vite has no special
 | Pattern | When to use |
 |---------|-------------|
 | `export function Foo() {}` | Default — most components |
-| `export const Foo = React.memo(function Foo() {})` | Components needing memoization |
+| `export const Foo = memo(function Foo() {})` | Components needing memoization (`import { memo } from 'react'` — this scaffold uses named React imports, there is no default `React` import anywhere) |
 | `const foo = () => {}` | Hooks, utilities, helpers, internal sub-components |
 
 ### Component Best Practices
@@ -37,7 +37,7 @@ Stack-specific component library:
 
 **Widgets** (`src/components/widgets/`): `brand-text` · `custom-card` · `custom-dialog` · `custom-form-field` · `link-list` · `media-card` · `pill`
 
-**Layout** (`src/components/layout/`): `navbar` · `site-footer` · `providers` · `error-boundary`
+**Layout** (`src/components/layout/`): `root-layout` · `navbar` · `site-footer` · `providers` · `error-boundary`
 
 **Component Placement**
 
@@ -50,21 +50,13 @@ Stack-specific component library:
 
 ### Environment Variables
 
-Centralized in `src/lib/constants/env.ts`:
+Centralized in `src/lib/constants/env.ts` — read that file for the authoritative shape of `ENV` and `getApiBaseUrl()`. It is not restated here: a second copy drifts from the real one the moment a key is added.
 
-```ts
-export const ENV = {
-  API_BASE_URL: import.meta.env.VITE_API_BASE_URL as string | undefined,
-  IS_DEV: import.meta.env.DEV,
-} as const;
-
-export const getApiBaseUrl = (): string => {
-  if (!ENV.API_BASE_URL) throw new Error('VITE_API_BASE_URL is not set');
-  return ENV.API_BASE_URL;
-};
-```
-
-Use `getApiBaseUrl()` in services — NEVER use `ENV.API_BASE_URL ?? ''`. NEVER put secrets in `VITE_*`.
+- Every `import.meta.env.VITE_*` read goes in that file and nowhere else — NEVER `import.meta.env` inline in a component or service, and NEVER `process.env` (it does not exist in the browser).
+- Use `getApiBaseUrl()` in services — NEVER `ENV.API_BASE_URL ?? ''`, which turns a missing-config error into a silent request to the wrong origin.
+- Call `getApiBaseUrl()` **inside** each request function, never at module top level — it throws when the var is unset, and a module-scope throw aborts bundle evaluation before `createRoot()` runs, producing a blank page no ErrorBoundary can catch.
+- `ENV` and `getApiBaseUrl` are both re-exported from `@/lib/constants` — import from the barrel.
+- NEVER put secrets in `VITE_*` — they are embedded in the client bundle.
 
 ### Testing
 
@@ -87,7 +79,7 @@ Use `getApiBaseUrl()` in services — NEVER use `ENV.API_BASE_URL ?? ''`. NEVER 
 
 **Input Validation**
 - Validate all form inputs with Zod via React Hook Form
-- Validate API response shapes with Zod `safeParse()` before rendering
+- Validate API response shapes with Zod in the service layer, before the data reaches a component. Default to `.parse()` — the thrown `ZodError` propagates to React Query's `error` state and the global handlers, which is the behavior every service in this template relies on. Reach for `safeParse()` only where the call site genuinely handles the failure itself (logging field errors, throwing a domain `APIError`, falling back) — never as a way to ignore it
 
 **Auth & Route Protection**
 - Protected routes wrapped with `<ProtectedRoute />` in `src/router.tsx`

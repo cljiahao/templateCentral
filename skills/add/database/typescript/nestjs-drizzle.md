@@ -7,10 +7,14 @@
 
 #### A1. Install Dependencies
 
+Read the exact RC from `.claude/rules/nestjs.md` (the SSOT for version floors) and install that version — never the floating `@rc` tag, which silently resolves to a different RC on every install:
+
 ```bash
-pnpm add drizzle-orm@rc postgres
-pnpm add -D drizzle-kit
+pnpm add drizzle-orm@<exact-rc-from-rules> postgres
+pnpm add -D drizzle-kit@<exact-rc-from-rules>
 ```
+
+Both packages must be on the same RC — a `drizzle-kit` that disagrees with `drizzle-orm` generates migrations the runtime cannot read.
 
 #### A2. Add Database Scripts
 
@@ -77,17 +81,18 @@ import { sql } from 'drizzle-orm';
 import postgres from 'postgres';
 
 import { serviceConfig } from '../config/env.config';
-import * as schema from './schema';
 
 @Injectable()
 export class DrizzleService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DrizzleService.name);
   private readonly client: ReturnType<typeof postgres>;
-  readonly db: ReturnType<typeof drizzle<typeof schema>>;
+  // In v1 the first type parameter of `drizzle` is TRelations, not the schema —
+  // tables are passed per query (`.from(users)`), so no schema generic is needed.
+  readonly db: ReturnType<typeof drizzle>;
 
   constructor() {
     this.client = postgres(serviceConfig.DATABASE_URL);
-    this.db = drizzle(this.client, { schema });
+    this.db = drizzle({ client: this.client });
   }
 
   async onModuleInit() {
@@ -275,6 +280,11 @@ import { DrizzleService } from '../../database/drizzle.service';
 import { users } from '../../database/schema';
 import type { LoginDto, RegisterDto } from './auth.dto';
 
+// Verified on the miss path so an unknown email costs the same as a wrong
+// password — without it, response timing leaks which accounts exist.
+const DUMMY_HASH =
+  '$argon2id$v=19$m=65536,t=3,p=1$c29tZXNhbHRzb21lc2E$Rdo0OMHkQXBTOTBqNCn0mPvBGiLxvGBIbxKZ0nJ0Aqo';
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -305,7 +315,11 @@ export class AuthService {
       .from(users)
       .where(eq(users.email, dto.email))
       .limit(1);
-    if (!user || !(await argon2.verify(user.hashedPassword, dto.password))) {
+    const passwordOk = await argon2.verify(
+      user?.hashedPassword ?? DUMMY_HASH,
+      dto.password,
+    );
+    if (!user || !passwordOk) {
       throw new UnauthorizedException('Invalid credentials.');
     }
     return {

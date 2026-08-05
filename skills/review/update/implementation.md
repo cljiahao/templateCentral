@@ -8,7 +8,7 @@ Fetch latest dependency versions from npm or PyPI, apply patch/minor bumps, roll
 
 ## Stack Detection
 
-Same as `build-agent`: check for `next.config.ts`, `next.config.js`, or `next.config.mjs` → Next.js; `vite.config.ts` or `vite.config.js` → Vite-React; `nest-cli.json` → NestJS; `requirements.txt` containing `fastapi` → FastAPI.
+Same as the build utility (load it with: `cat "<skill-dir>/../build/SKILL.md"`): check for `next.config.ts`, `next.config.js`, or `next.config.mjs` → Next.js; `vite.config.ts` or `vite.config.js` → Vite-React; `nest-cli.json` → NestJS; `requirements.txt` containing `fastapi` → FastAPI.
 
 Node stacks (Next.js, Vite-React, NestJS): read `package.json`.
 FastAPI: read `requirements.txt`.
@@ -26,7 +26,7 @@ FastAPI: read `requirements.txt`.
    - **Current** → skip
 4. Rewrite `package.json` with bumped versions (keep `^` prefix for all updated deps)
 5. Run `pnpm install`
-6. Dispatch `build-agent`
+6. Dispatch the build utility — load it with: `cat "<skill-dir>/../build/SKILL.md"`
 7. If build fails → rollback (see Rollback below)
 8. Run `pnpm audit --audit-level=high`
    - A non-zero exit due to found advisories is expected — record them and continue to step 9
@@ -45,7 +45,7 @@ FastAPI: read `requirements.txt`.
    - **Major bump** → report-only list
 4. Rewrite `requirements.txt` with exact pinned versions (`package==new_version`)
 5. Run `pip install -r requirements.txt`
-6. Dispatch `build-agent`
+6. Dispatch the build utility — load it with: `cat "<skill-dir>/../build/SKILL.md"`
 7. If build fails → rollback
 8. Run `pip-audit --requirement requirements.txt` if `pip-audit` is available
    - If `pip-audit` is not installed: add note "pip-audit not installed — security advisory check skipped" to report
@@ -55,11 +55,11 @@ FastAPI: read `requirements.txt`.
 
 ## Rollback
 
-If `build-agent` reports failure after applying all updates:
+If the build utility (load it with: `cat "<skill-dir>/../build/SKILL.md"`) reports failure after applying all updates:
 
 1. Save list of updated packages + old/new versions
 2. Restore original `package.json` / `requirements.txt`
-3. Restore one package at a time — re-apply all updates except one, run `pnpm install` / `pip install`, dispatch `build-agent`
+3. Restore one package at a time — re-apply all updates except one, run `pnpm install` / `pip install`, dispatch the build utility (load it with: `cat "<skill-dir>/../build/SKILL.md"`)
 4. Repeat until the breaking package is identified
 5. Keep all updates except the breaking package
 6. Report which package could not be updated and its current vs attempted version

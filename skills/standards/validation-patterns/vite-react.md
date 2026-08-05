@@ -3,40 +3,50 @@
      prereq: Stack = vite-react. Do not invoke this file directly — it is loaded at runtime by the templatecentral:standards skill. -->
 ### Vite + React (TypeScript + React Hook Form + Zod)
 
-**1. Form Component with Validation**
+**1. Schemas live in `schemas/`, never in the component file**
 
-```tsx
-// src/features/projects/components/create-project-form.tsx
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+A schema is data-shape policy, not view code. Keeping it in its own module is what lets a service, a test, and a form all validate against the same definition instead of drifting apart:
+
+```ts
+// src/features/projects/schemas/create-project.schema.ts
 import { z } from 'zod';
-import { Form } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { CustomFormField } from '@/components/widgets';
-import { Button } from '@/components/ui/button';
 
-const createProjectSchema = z.object({
-  name: z
-    .string()
-    .min(1, 'Name is required')
-    .max(100, 'Name must be under 100 characters'),
-  description: z
-    .string()
-    .max(500, 'Description must be under 500 characters')
-    .optional(),
+export const createProjectSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(100, 'Name must be under 100 characters'),
+  description: z.string().max(500, 'Description must be under 500 characters').optional(),
 });
 
-// Password fields: modern authenticator guidance — require length and screen against
-// breached-password lists; do NOT impose character-composition rules. Long passphrases beat
-// short complex strings.
-// Canonical definition lives in standards/validation-patterns/patterns.md — keep these identical.
+export type CreateProjectData = z.input<typeof createProjectSchema>;
+```
+
+```ts
+// src/features/auth/schemas/password.schema.ts
+// Modern authenticator guidance: require length and screen against breached-password
+// lists; do NOT impose character-composition rules. Long passphrases beat short complex
+// strings. Canonical definition lives in standards/validation-patterns/patterns.md —
+// keep these identical.
+import { z } from 'zod';
+
 export const passwordSchema = z
   .string()
   .min(12, 'Password must be at least 12 characters')
   .max(128, 'Password must be at most 128 characters');
+```
 
-type CreateProjectData = z.input<typeof createProjectSchema>;
+**2. Form Component with Validation**
+
+```tsx
+// src/features/projects/components/create-project-form.tsx
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Button } from '@/components/ui/button';
+import { Form } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { CustomFormField } from '@/components/widgets';
+import { getApiBaseUrl } from '@/lib/constants';
+import { logError } from '@/lib/errors';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { createProjectSchema, type CreateProjectData } from '../schemas/create-project.schema';
 
 export function CreateProjectForm() {
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -48,7 +58,7 @@ export function CreateProjectForm() {
   const onSubmit = async (data: CreateProjectData) => {
     try {
       setSubmitError(null);
-      const response = await fetch('/api/projects', {
+      const response = await fetch(`${getApiBaseUrl()}/projects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -56,8 +66,11 @@ export function CreateProjectForm() {
       });
 
       if (!response.ok) {
-        const body = await response.json();
-        setSubmitError(body.error || 'Failed to create project');
+        // The backend's error text is for engineers, not users — it can carry stack
+        // traces, SQL fragments, or internal identifiers. Log it, show a fixed string.
+        const body = await response.json().catch(() => ({}));
+        logError('CreateProjectForm: create failed', new Error(String(body.error ?? response.status)));
+        setSubmitError('Failed to create project. Please try again.');
         return;
       }
 
@@ -95,12 +108,13 @@ export function CreateProjectForm() {
 
 `CustomFormField` (`src/components/widgets/custom-form-field.tsx`) takes `name`, `label`, optional `description`, and a single input child — it wires the Controller, label, and error message internally via `useFormContext()`. Do NOT wrap it in `FormField`/`FormControl`/`FormItem` or spread `{...field}` onto it.
 
-**2. File Upload with Server-Side Validation (Critical)**
+**3. File Upload with Server-Side Validation (Critical)**
 
 ⚠️ **Important:** Client validation can be bypassed. Server-side validation is MANDATORY.
 
 ```tsx
 // src/features/projects/components/file-upload-form.tsx
+import { getApiBaseUrl } from '@/lib/constants';
 import { type ChangeEvent, useState } from 'react';
 import { z } from 'zod';
 
@@ -177,7 +191,7 @@ export function FileUploadForm() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('/api/projects/upload', {
+      const response = await fetch(`${getApiBaseUrl()}/projects/upload`, {
         method: 'POST',
         body: formData,
         // Note: Don't set Content-Type; browser handles multipart
@@ -217,12 +231,17 @@ export function FileUploadForm() {
 }
 ```
 
-**3. API Client with Response Validation**
+**4. API Client with Response Validation**
+
+`id` arrives from `useParams` — it is user input, so it is validated before it is used and encoded before it is interpolated into a path. Validation rejects the wrong *kind* of value; `encodeURIComponent` stops a `/` or `?` in the value from rewriting the URL.
 
 ```ts
 // src/lib/clients/api-client.ts
+import { getApiBaseUrl } from '@/lib/constants';
+import { APIError, logError } from '@/lib/errors';
 import { z } from 'zod';
-import { APIError } from '@/lib/errors';
+
+const projectIdSchema = z.uuid();
 
 const projectSchema = z.object({
   id: z.uuid(),
@@ -234,24 +253,46 @@ const projectSchema = z.object({
 type Project = z.infer<typeof projectSchema>;
 
 export async function fetchProject(id: string): Promise<Project> {
-  const response = await fetch(`/api/projects/${id}`);
+  const parsedId = projectIdSchema.safeParse(id);
+  if (!parsedId.success) {
+    throw new APIError({ statusCode: 400, data: { message: 'Invalid project id.' } });
+  }
+
+  // getApiBaseUrl() is called here, not at module scope — a module-scope throw would
+  // abort bundle evaluation before createRoot() runs and render a blank page.
+  const response = await fetch(`${getApiBaseUrl()}/projects/${encodeURIComponent(parsedId.data)}`);
 
   if (!response.ok) {
     throw new APIError({ statusCode: response.status, data: await response.json().catch(() => ({ message: 'Failed to fetch project' })) });
   }
 
-  const data = await response.json();
+  const data: unknown = await response.json();
 
-  // Validate response shape
   const parsed = projectSchema.safeParse(data);
-
   if (!parsed.success) {
-    throw new Error('Invalid API response');
+    // APIError, never a generic Error — the app's error handling is keyed on it.
+    // Field detail goes to the log; the thrown message stays user-safe.
+    logError(
+      'fetchProject: response failed schema validation',
+      new Error(JSON.stringify(z.flattenError(parsed.error).fieldErrors))
+    );
+    throw new APIError({
+      statusCode: 502,
+      data: { message: 'Received an unexpected response from the server.' },
+    });
   }
 
   return parsed.data;
 }
 ```
+
+## Rules
+
+- Schemas live in `schemas/` — NEVER define or export a schema from a component file
+- NEVER hardcode `/api/...` paths — build every URL from `getApiBaseUrl()`, called inside the request function
+- Always validate route params / query values with Zod before use, and `encodeURIComponent` any value interpolated into a path
+- Throw `APIError`, never a generic `Error` — and never embed validation field detail in the thrown message
+- NEVER render a backend error string to the user — log it, show a fixed generic message
 
 ## Testing / Verification
 

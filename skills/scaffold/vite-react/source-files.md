@@ -6,11 +6,11 @@
 ### `src/main.tsx`
 
 ```tsx
-import { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
 import { App } from '@/app';
 import { registerGlobalErrorHandlers } from '@/lib/errors';
 import '@/styles/globals.css';
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
 
 // Capture async/event/promise errors that ErrorBoundary (render-phase only) cannot see.
 registerGlobalErrorHandlers();
@@ -266,21 +266,21 @@ export { NotFoundPage } from './not-found';
 Update `"Vite + React Template"` to the project name during scaffolding.
 
 ```tsx
-import { Link } from 'react-router';
 import { PAGE_ROUTES } from '@/lib/constants/routes';
+import { Link } from 'react-router';
 
 export function HomePage() {
   return (
     <div className="max-w-site mx-auto w-full px-6 py-16">
       <div className="flex flex-col items-center gap-6 text-center">
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">Vite + React Template</h1>
-        <p className="max-w-xl text-lg text-muted-foreground">
+        <p className="text-muted-foreground max-w-xl text-lg">
           A production-ready starter with React Router, TanStack Query, Tailwind CSS, and a
           feature-driven folder structure.
         </p>
         <Link
           to={PAGE_ROUTES.DASHBOARD}
-          className="rounded-lg bg-primary px-6 py-3 font-semibold text-primary-foreground transition-colors hover:bg-primary-hover"
+          className="bg-primary text-primary-foreground hover:bg-primary-hover rounded-lg px-6 py-3 font-semibold transition-colors"
         >
           Go to Dashboard
         </Link>
@@ -313,7 +313,7 @@ export function DashboardPage() {
   return (
     <div className="max-w-site mx-auto w-full px-6 py-12">
       <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-      <p className="mt-2 text-muted-foreground">
+      <p className="text-muted-foreground mt-2">
         This page demonstrates the feature module pattern with TanStack Query.
       </p>
 
@@ -328,17 +328,17 @@ export function DashboardPage() {
 ### `src/pages/not-found.tsx`
 
 ```tsx
-import { Link } from 'react-router';
 import { PAGE_ROUTES } from '@/lib/constants/routes';
+import { Link } from 'react-router';
 
 export function NotFoundPage() {
   return (
     <div className="flex-center min-h-[60vh] flex-col gap-4">
       <h1 className="text-6xl font-bold">404</h1>
-      <p className="text-lg text-muted-foreground">Page not found</p>
+      <p className="text-muted-foreground text-lg">Page not found</p>
       <Link
         to={PAGE_ROUTES.HOME}
-        className="mt-2 text-sm font-medium text-primary underline underline-offset-4 hover:text-primary-hover"
+        className="text-primary hover:text-primary-hover mt-2 text-sm font-medium underline underline-offset-4"
       >
         Go back home
       </Link>
@@ -467,7 +467,7 @@ export function LoginCard() {
         {ENV.IS_DEV && (
           <button
             type="button"
-            className="rounded-md border-2 bg-card px-4 py-3 text-sm text-muted-foreground hover:bg-muted"
+            className="bg-card text-muted-foreground hover:bg-muted rounded-md border-2 px-4 py-3 text-sm"
             onClick={handleDevLogin}
           >
             Dev login (bypass auth)
@@ -530,8 +530,8 @@ export const useAuth = () => {
 
 ```ts
 export * from './components';
-export * from './hooks';
 export * from './constants';
+export * from './hooks';
 export type { ExampleItem } from './types';
 ```
 
@@ -714,11 +714,11 @@ Empty file — placeholder for Zod schemas added by the `templatecentral:add` (f
 ### `src/components/layout/index.ts`
 
 ```ts
+export { ErrorBoundary } from './error-boundary';
 export { Navbar } from './navbar';
 export { Providers } from './providers';
 export { RootLayout } from './root-layout';
 export { SiteFooter } from './site-footer';
-export { ErrorBoundary } from './error-boundary';
 ```
 
 ### `src/components/layout/error-boundary.tsx`
@@ -804,7 +804,7 @@ export function Navbar() {
   const { pathname } = useLocation();
 
   return (
-    <nav className="sticky top-0 z-50 w-full border-b bg-card">
+    <nav className="bg-card sticky top-0 z-50 w-full border-b">
       <div className="max-w-site flex-between mx-auto px-6 py-4">
         <Link to={PAGE_ROUTES.HOME} className="text-xl font-bold tracking-tight">
           templateCentral
@@ -816,7 +816,7 @@ export function Navbar() {
               key={link.href}
               to={link.href}
               className={cn(
-                'text-sm font-medium transition-colors hover:text-primary',
+                'hover:text-primary text-sm font-medium transition-colors',
                 pathname === link.href ? 'text-primary' : 'text-muted-foreground'
               )}
             >
@@ -897,9 +897,9 @@ interface SiteFooterProps {
 
 export function SiteFooter({ creditText = 'Built with templateCentral' }: SiteFooterProps) {
   return (
-    <footer className="w-full border-t bg-foreground">
+    <footer className="bg-foreground w-full border-t">
       <div className="max-w-site mx-auto px-6 py-6">
-        <p className="text-sm text-background">{creditText}</p>
+        <p className="text-background text-sm">{creditText}</p>
       </div>
     </footer>
   );
@@ -952,9 +952,9 @@ interface CustomCardProps {
 
 export function CustomCard({ header, description, children, className }: CustomCardProps) {
   return (
-    <div className={cn('rounded-lg border bg-card p-6 shadow-xs', className)}>
+    <div className={cn('bg-card rounded-lg border p-6 shadow-xs', className)}>
       <h3 className="text-lg font-semibold">{header}</h3>
-      {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+      {description && <p className="text-muted-foreground mt-1 text-sm">{description}</p>}
       {children && <div className="mt-4">{children}</div>}
     </div>
   );
@@ -964,7 +964,6 @@ export function CustomCard({ header, description, children, className }: CustomC
 ### `src/components/widgets/custom-dialog.tsx`
 
 ```tsx
-import type { ComponentProps, ReactNode } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -974,11 +973,9 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import type { ComponentProps, ReactNode } from 'react';
 
-interface CustomDialogProps extends Omit<
-  ComponentProps<typeof Dialog>,
-  'children'
-> {
+interface CustomDialogProps extends Omit<ComponentProps<typeof Dialog>, 'children'> {
   className?: string;
   children: ReactNode;
   trigger?: ReactNode;
@@ -1019,12 +1016,7 @@ export function CustomDialog({
 import { cloneElement, type ReactElement } from 'react';
 import { Controller, useFormContext } from 'react-hook-form';
 
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-} from '@/components/ui/field';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field';
 
 interface CustomFormFieldProps {
   name: string;
@@ -1033,12 +1025,7 @@ interface CustomFormFieldProps {
   children: ReactElement<Record<string, unknown>>;
 }
 
-export function CustomFormField({
-  name,
-  label,
-  description,
-  children,
-}: CustomFormFieldProps) {
+export function CustomFormField({ name, label, description, children }: CustomFormFieldProps) {
   const { control } = useFormContext();
 
   return (
@@ -1093,10 +1080,7 @@ export function LinkList({ links, className }: LinkListProps) {
           href={link.href}
           target={link.target}
           rel={link.target === '_blank' ? 'noopener noreferrer' : undefined}
-          className={cn(
-            'hover:text-primary font-semibold transition-colors',
-            className
-          )}
+          className={cn('hover:text-primary font-semibold transition-colors', className)}
         >
           {link.label}
         </a>
@@ -1109,13 +1093,7 @@ export function LinkList({ links, className }: LinkListProps) {
 ### `src/components/widgets/media-card.tsx`
 
 ```tsx
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type { ReactNode } from 'react';
 
@@ -1170,14 +1148,8 @@ export function MediaCard({
   return (
     <div className="bg-brand-gradient rounded-lg p-px">
       <Card className={cn('flex h-full w-full p-2', card, className)}>
-        {children && (
-          <CardContent className={cn('flex-center', content)}>
-            {children}
-          </CardContent>
-        )}
-        <CardHeader
-          className={cn('flex-col gap-3', header, !children && 'flex-center')}
-        >
+        {children && <CardContent className={cn('flex-center', content)}>{children}</CardContent>}
+        <CardHeader className={cn('flex-col gap-3', header, !children && 'flex-center')}>
           <CardTitle className={text}>{title}</CardTitle>
           {description && (
             <CardDescription className={cn('text-wrap', text, descClassName)}>
@@ -1209,9 +1181,7 @@ export function Pill({ children, variant = 'outline' }: PillProps) {
       <span
         className={cn(
           'inline-block rounded-full px-4 py-1.5 text-sm font-medium',
-          variant === 'solid'
-            ? 'text-background'
-            : 'bg-card text-muted-foreground'
+          variant === 'solid' ? 'text-background' : 'bg-card text-muted-foreground'
         )}
       >
         {children}
@@ -1219,514 +1189,6 @@ export function Pill({ children, variant = 'outline' }: PillProps) {
     </div>
   );
 }
-```
-
-### `src/components/ui/button-group.tsx`
-
-Custom component (not managed by shadcn CLI):
-
-```tsx
-import type { ComponentProps } from 'react';
-
-import { Slot } from '@radix-ui/react-slot';
-import { cva, type VariantProps } from 'class-variance-authority';
-
-import { Separator } from '@/components/ui/separator';
-import { cn } from '@/lib/utils/index';
-
-// Note: Slot is used directly as a component; Slot.Root does not exist on the Slot component itself.
-
-const buttonGroupVariants = cva(
-  "flex w-fit items-stretch [&>*]:focus-visible:z-10 [&>*]:focus-visible:relative [&>[data-slot=select-trigger]:not([class*='w-'])]:w-fit [&>input]:flex-1 has-[select[aria-hidden=true]:last-child]:[&>[data-slot=select-trigger]:last-of-type]:rounded-r-md has-[>[data-slot=button-group]]:gap-2",
-  {
-    variants: {
-      orientation: {
-        horizontal:
-          '[&>*:not(:first-child)]:rounded-l-none [&>*:not(:first-child)]:border-l-0 [&>*:not(:last-child)]:rounded-r-none',
-        vertical:
-          'flex-col [&>*:not(:first-child)]:rounded-t-none [&>*:not(:first-child)]:border-t-0 [&>*:not(:last-child)]:rounded-b-none',
-      },
-    },
-    defaultVariants: {
-      orientation: 'horizontal',
-    },
-  }
-);
-
-function ButtonGroup({
-  className,
-  orientation,
-  ...props
-}: ComponentProps<'div'> & VariantProps<typeof buttonGroupVariants>) {
-  return (
-    <div
-      role="group"
-      data-slot="button-group"
-      data-orientation={orientation}
-      className={cn(buttonGroupVariants({ orientation }), className)}
-      {...props}
-    />
-  );
-}
-
-function ButtonGroupText({
-  className,
-  asChild = false,
-  ...props
-}: ComponentProps<'div'> & {
-  asChild?: boolean;
-}) {
-  const Comp = asChild ? Slot : 'div';
-
-  return (
-    <Comp
-      className={cn(
-        "bg-muted flex items-center gap-2 rounded-md border px-4 text-sm font-medium shadow-xs [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4",
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function ButtonGroupSeparator({
-  className,
-  orientation = 'vertical',
-  ...props
-}: ComponentProps<typeof Separator>) {
-  return (
-    <Separator
-      data-slot="button-group-separator"
-      orientation={orientation}
-      className={cn(
-        'bg-input relative !m-0 self-stretch data-[orientation=vertical]:h-auto',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-export { ButtonGroup, ButtonGroupSeparator, ButtonGroupText, buttonGroupVariants };
-```
-
-### `src/components/ui/field.tsx`
-
-Custom component (not managed by shadcn CLI):
-
-```tsx
-import type { ComponentProps, ReactNode } from 'react';
-import { useMemo } from 'react';
-
-import { cva, type VariantProps } from 'class-variance-authority';
-
-import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
-import { cn } from '@/lib/utils';
-
-function FieldSet({ className, ...props }: ComponentProps<'fieldset'>) {
-  return (
-    <fieldset
-      data-slot="field-set"
-      className={cn(
-        'flex flex-col gap-6',
-        'has-[>[data-slot=checkbox-group]]:gap-3 has-[>[data-slot=radio-group]]:gap-3',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function FieldLegend({
-  className,
-  variant = 'legend',
-  ...props
-}: ComponentProps<'legend'> & { variant?: 'legend' | 'label' }) {
-  return (
-    <legend
-      data-slot="field-legend"
-      data-variant={variant}
-      className={cn(
-        'mb-3 font-medium',
-        'data-[variant=legend]:text-base',
-        'data-[variant=label]:text-sm',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function FieldGroup({ className, ...props }: ComponentProps<'div'>) {
-  return (
-    <div
-      data-slot="field-group"
-      className={cn(
-        'group/field-group @container/field-group flex w-full flex-col gap-7 data-[slot=checkbox-group]:gap-3 [&>[data-slot=field-group]]:gap-4',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-const fieldVariants = cva(
-  'group/field flex w-full gap-3 data-[invalid=true]:text-destructive',
-  {
-    variants: {
-      orientation: {
-        vertical: ['flex-col [&>*]:w-full [&>.sr-only]:w-auto'],
-        horizontal: [
-          'flex-row items-center',
-          '[&>[data-slot=field-label]]:flex-auto',
-          'has-[>[data-slot=field-content]]:items-start has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px',
-        ],
-        responsive: [
-          'flex-col [&>*]:w-full [&>.sr-only]:w-auto @md/field-group:flex-row @md/field-group:items-center @md/field-group:[&>*]:w-auto',
-          '@md/field-group:[&>[data-slot=field-label]]:flex-auto',
-          '@md/field-group:has-[>[data-slot=field-content]]:items-start @md/field-group:has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px',
-        ],
-      },
-    },
-    defaultVariants: {
-      orientation: 'vertical',
-    },
-  }
-);
-
-function Field({
-  className,
-  orientation = 'vertical',
-  ...props
-}: ComponentProps<'div'> & VariantProps<typeof fieldVariants>) {
-  return (
-    <div
-      role="group"
-      data-slot="field"
-      data-orientation={orientation}
-      className={cn(fieldVariants({ orientation }), className)}
-      {...props}
-    />
-  );
-}
-
-function FieldContent({ className, ...props }: ComponentProps<'div'>) {
-  return (
-    <div
-      data-slot="field-content"
-      className={cn(
-        'group/field-content flex flex-1 flex-col gap-1.5 leading-snug',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function FieldLabel({
-  className,
-  ...props
-}: ComponentProps<typeof Label>) {
-  return (
-    <Label
-      data-slot="field-label"
-      className={cn(
-        'group/field-label peer/field-label flex w-fit gap-2 leading-snug group-data-[disabled=true]/field:opacity-50',
-        'has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-[>[data-slot=field]]:rounded-md has-[>[data-slot=field]]:border [&>*]:data-[slot=field]:p-4',
-        'has-data-[state=checked]:bg-primary/5 has-data-[state=checked]:border-primary',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function FieldTitle({ className, ...props }: ComponentProps<'div'>) {
-  return (
-    <div
-      data-slot="field-label"
-      className={cn(
-        'flex w-fit items-center gap-2 text-sm leading-snug font-medium group-data-[disabled=true]/field:opacity-50',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function FieldDescription({ className, ...props }: ComponentProps<'p'>) {
-  return (
-    <p
-      data-slot="field-description"
-      className={cn(
-        'text-muted-foreground text-sm leading-normal font-normal group-has-[[data-orientation=horizontal]]/field:text-balance',
-        'last:mt-0 nth-last-2:-mt-1 [[data-variant=legend]+&]:-mt-1.5',
-        '[&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function FieldSeparator({
-  children,
-  className,
-  ...props
-}: ComponentProps<'div'> & {
-  children?: ReactNode;
-}) {
-  return (
-    <div
-      data-slot="field-separator"
-      data-content={!!children}
-      className={cn(
-        'relative -my-2 h-5 text-sm group-data-[variant=outline]/field-group:-mb-2',
-        className
-      )}
-      {...props}
-    >
-      <Separator className="absolute inset-0 top-1/2" />
-      {children && (
-        <span
-          className="bg-background text-muted-foreground relative mx-auto block w-fit px-2"
-          data-slot="field-separator-content"
-        >
-          {children}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function FieldError({
-  className,
-  children,
-  errors,
-  ...props
-}: ComponentProps<'div'> & {
-  errors?: Array<{ message?: string } | undefined>;
-}) {
-  const content = useMemo(() => {
-    if (children) {
-      return children;
-    }
-
-    if (!errors?.length) {
-      return null;
-    }
-
-    if (errors?.length === 1) {
-      return errors[0]?.message;
-    }
-
-    return (
-      <ul className="ml-4 flex list-disc flex-col gap-1">
-        {errors.map(
-          (error, index) =>
-            error?.message && <li key={index}>{error.message}</li>
-        )}
-      </ul>
-    );
-  }, [children, errors]);
-
-  if (!content) {
-    return null;
-  }
-
-  return (
-    <div
-      role="alert"
-      data-slot="field-error"
-      className={cn('text-destructive text-sm font-normal', className)}
-      {...props}
-    >
-      {content}
-    </div>
-  );
-}
-
-export {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-  FieldLegend,
-  FieldSeparator,
-  FieldSet,
-  FieldTitle,
-};
-```
-
-### `src/components/ui/input-group.tsx`
-
-Custom component (not managed by shadcn CLI):
-
-```tsx
-import { cva, type VariantProps } from 'class-variance-authority';
-import * as React from 'react';
-
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { cn } from '@/lib/utils/index';
-
-function InputGroup({ className, ...props }: React.ComponentProps<'div'>) {
-  return (
-    <div
-      data-slot="input-group"
-      role="group"
-      className={cn(
-        'group/input-group border-input relative flex w-full items-center rounded-md border shadow-xs transition-[color,box-shadow] outline-hidden',
-        'h-9 min-w-0 has-[>textarea]:h-auto',
-        'has-[>[data-align=inline-start]]:[&>input]:pl-2',
-        'has-[>[data-align=inline-end]]:[&>input]:pr-2',
-        'has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col has-[>[data-align=block-start]]:[&>input]:pb-3',
-        'has-[>[data-align=block-end]]:h-auto has-[>[data-align=block-end]]:flex-col has-[>[data-align=block-end]]:[&>input]:pt-3',
-        'has-[[data-slot=input-group-control]:focus-visible]:border-ring has-[[data-slot=input-group-control]:focus-visible]:ring-ring/50 has-[[data-slot=input-group-control]:focus-visible]:ring-[3px]',
-        'has-[[data-slot][aria-invalid=true]]:ring-destructive/20 has-[[data-slot][aria-invalid=true]]:border-destructive',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-const inputGroupAddonVariants = cva(
-  "text-muted-foreground flex h-auto cursor-text items-center justify-center gap-2 py-1.5 text-sm font-medium select-none [&>svg:not([class*='size-'])]:size-4 [&>kbd]:rounded-[calc(var(--radius)-5px)] group-data-[disabled=true]/input-group:opacity-50",
-  {
-    variants: {
-      align: {
-        'inline-start':
-          'order-first pl-3 has-[>button]:ml-[-0.45rem] has-[>kbd]:ml-[-0.35rem]',
-        'inline-end':
-          'order-last pr-3 has-[>button]:mr-[-0.45rem] has-[>kbd]:mr-[-0.35rem]',
-        'block-start':
-          'order-first w-full justify-start px-3 pt-3 [.border-b]:pb-3 group-has-[>input]/input-group:pt-2.5',
-        'block-end':
-          'order-last w-full justify-start px-3 pb-3 [.border-t]:pt-3 group-has-[>input]/input-group:pb-2.5',
-      },
-    },
-    defaultVariants: {
-      align: 'inline-start',
-    },
-  }
-);
-
-function InputGroupAddon({
-  className,
-  align = 'inline-start',
-  ...props
-}: React.ComponentProps<'div'> & VariantProps<typeof inputGroupAddonVariants>) {
-  return (
-    <div
-      role="group"
-      data-slot="input-group-addon"
-      data-align={align}
-      className={cn(inputGroupAddonVariants({ align }), className)}
-      onClick={(e) => {
-        if ((e.target as HTMLElement).closest('button')) {
-          return;
-        }
-        e.currentTarget.parentElement?.querySelector('input')?.focus();
-      }}
-      {...props}
-    />
-  );
-}
-
-const inputGroupButtonVariants = cva(
-  'text-sm shadow-none flex gap-2 items-center',
-  {
-    variants: {
-      size: {
-        xs: "h-6 gap-1 px-2 rounded-[calc(var(--radius)-5px)] [&>svg:not([class*='size-'])]:size-3.5 has-[>svg]:px-2",
-        sm: 'h-8 px-2.5 gap-1.5 rounded-md has-[>svg]:px-2.5',
-        'icon-xs':
-          'size-6 rounded-[calc(var(--radius)-5px)] p-0 has-[>svg]:p-0',
-        'icon-sm': 'size-8 p-0 has-[>svg]:p-0',
-      },
-    },
-    defaultVariants: {
-      size: 'xs',
-    },
-  }
-);
-
-function InputGroupButton({
-  className,
-  type = 'button',
-  variant = 'ghost',
-  size = 'xs',
-  ...props
-}: Omit<React.ComponentProps<typeof Button>, 'size'> &
-  VariantProps<typeof inputGroupButtonVariants>) {
-  return (
-    <Button
-      type={type}
-      data-size={size}
-      variant={variant}
-      className={cn(inputGroupButtonVariants({ size }), className)}
-      {...props}
-    />
-  );
-}
-
-function InputGroupText({ className, ...props }: React.ComponentProps<'span'>) {
-  return (
-    <span
-      className={cn(
-        "text-muted-foreground flex items-center gap-2 text-sm [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4",
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function InputGroupInput({
-  className,
-  ...props
-}: React.ComponentProps<'input'>) {
-  return (
-    <Input
-      data-slot="input-group-control"
-      className={cn(
-        'flex-1 rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function InputGroupTextarea({
-  className,
-  ...props
-}: React.ComponentProps<'textarea'>) {
-  return (
-    <Textarea
-      data-slot="input-group-control"
-      className={cn(
-        'flex-1 resize-none rounded-none border-0 bg-transparent py-3 shadow-none focus-visible:ring-0',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-export {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-  InputGroupText,
-  InputGroupTextarea,
-};
 ```
 
 ### `src/lib/clients/fetch-client.ts`
@@ -1746,13 +1208,7 @@ const BINARY_CONTENT_TYPES = [
   'audio/',
 ];
 
-const TEXT_CONTENT_TYPES = [
-  'text/plain',
-  'text/html',
-  'text/csv',
-  'text/xml',
-  'application/xml',
-];
+const TEXT_CONTENT_TYPES = ['text/plain', 'text/html', 'text/csv', 'text/xml', 'application/xml'];
 
 export abstract class FetchClient {
   constructor(
@@ -1768,7 +1224,10 @@ export abstract class FetchClient {
     body?: unknown,
     query: Record<string, string | number | boolean | undefined> = {}
   ): Promise<T> {
-    const url = new URL(`${this.baseUrl.replace(/\/$/, '')}/${path.replace(/^\//, '')}`, window.location.origin);
+    const url = new URL(
+      `${this.baseUrl.replace(/\/$/, '')}/${path.replace(/^\//, '')}`,
+      window.location.origin
+    );
 
     for (const [k, v] of Object.entries(query)) {
       if (v !== undefined) url.searchParams.set(k, String(v));
@@ -1803,14 +1262,11 @@ export abstract class FetchClient {
 
     const contentType = res.headers.get('Content-Type') ?? '';
 
-    if (contentType.includes('application/json'))
-      return (await res.json()) as T;
+    if (contentType.includes('application/json')) return (await res.json()) as T;
     if (this.matchesContentType(contentType, BINARY_CONTENT_TYPES))
       return (await res.arrayBuffer()) as T;
-    if (this.matchesContentType(contentType, TEXT_CONTENT_TYPES))
-      return (await res.text()) as T;
-    if (contentType.includes('multipart/form-data'))
-      return (await res.formData()) as T;
+    if (this.matchesContentType(contentType, TEXT_CONTENT_TYPES)) return (await res.text()) as T;
+    if (contentType.includes('multipart/form-data')) return (await res.formData()) as T;
 
     return this.fallbackParse<T>(res);
   }
@@ -1834,13 +1290,8 @@ export abstract class FetchClient {
     try {
       return JSON.parse(text);
     } catch {
-      if (
-        contentType.includes('text/html') ||
-        text.trimStart().startsWith('<')
-      ) {
-        console.error(
-          `[HTTP ${res.status}] Received HTML error response from ${res.url}`
-        );
+      if (contentType.includes('text/html') || text.trimStart().startsWith('<')) {
+        console.error(`[HTTP ${res.status}] Received HTML error response from ${res.url}`);
         return { message: res.statusText };
       }
       return { message: text };
@@ -1883,8 +1334,8 @@ export const getApiBaseUrl = (): string => {
 ### `src/lib/constants/index.ts`
 
 ```ts
+export { ENV, getApiBaseUrl } from './env';
 export { API_ROUTES, PAGE_ROUTES } from './routes';
-export { ENV } from './env';
 ```
 
 ### `src/lib/constants/routes.ts`
@@ -1967,8 +1418,7 @@ describe('registerGlobalErrorHandlers', () => {
 ### `src/lib/errors/api-error.ts`
 
 ```ts
-const isRecord = (x: unknown): x is Record<string, unknown> =>
-  typeof x === 'object' && x !== null;
+const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null;
 
 function safeStringify(x: unknown): string {
   try {
@@ -2100,19 +1550,16 @@ pnpm install
 ### 5. Install shadcn components
 
 ```bash
-npx shadcn@latest add accordion avatar button card checkbox dialog dropdown-menu form input label select separator skeleton sonner tabs textarea
+npx shadcn@latest add accordion avatar button button-group card checkbox dialog dropdown-menu field form input input-group label select separator skeleton sonner tabs textarea
 ```
 
-After shadcn installs, write the custom UI components verbatim (they are NOT managed by shadcn CLI):
-- `src/components/ui/button-group.tsx`
-- `src/components/ui/field.tsx`
-- `src/components/ui/input-group.tsx`
+`button-group`, `field`, and `input-group` are registry components — the CLI owns them, so never hand-write or hand-edit those files. `src/components/widgets/custom-form-field.tsx` imports from `@/components/ui/field`, so the `field` install must succeed before the verification gate.
 
 ### 6. Verification gate
 
 Do NOT generate `AGENTS.md` until ALL of these pass:
 
-> Run `pnpm format:write` once first if this is a fresh scaffold — Prettier drift on newly generated files will cause `pnpm check` to fail until formatted.
+> Run `pnpm format` once first if this is a fresh scaffold — Prettier drift on newly generated files will cause `pnpm check` to fail until formatted.
 
 ```bash
 pnpm build        # zero errors
@@ -2209,7 +1656,7 @@ allowed-tools: Bash(pnpm *)
 Run all quality checks in sequence:
 
 ```bash
-pnpm exec tsc --noEmit --incremental && pnpm check && pnpm test
+pnpm check && pnpm test
 ```
 
 Report failures with the exact error output. Fix before proceeding.
@@ -2241,7 +1688,7 @@ Create `CLAUDE.md` at the project root with exactly one line:
 
 This imports `AGENTS.md` fully into every Claude Code session. Do not duplicate commands or conventions here — everything lives in `AGENTS.md`.
 
-After creating it, add a `CLAUDE.md` entry to `seeded_files` in `.claude/harness.json` with its SHA-256 hash (see 7e).
+After creating it, add a `CLAUDE.md` entry to `seeded_files` in `.claude/harness.json` with its SHA-256 hash (see harness-kit.md Step E).
 
 ### 9. Optional: Task management
 

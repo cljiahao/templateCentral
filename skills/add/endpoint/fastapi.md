@@ -6,7 +6,7 @@
 
 Guide for adding a new API endpoint following the router → service architecture.
 
-> **Placeholder names**: All examples use `my_endpoint`, `MyRequest`, `my_service`, etc. Replace these with your actual resource name throughout (e.g., for a `tasks` resource: `tasks.py`, `TaskRequest`, `run_task_service`). The import name must match the filename (e.g., `tasks.py` → `from api.routers import tasks`).
+> **Placeholder names**: All examples use a single resource stem, `my_thing` — schema, service, and router files are all `my_thing.py` in their respective directories, with classes `MyThingRequest` / `MyThingResponse`. Replace the stem with your actual resource name throughout (e.g., for a `tasks` resource: `tasks.py`, `TaskRequest`, `run_task_service`). The import name must match the filename (e.g., `tasks.py` → `from api.routers import tasks`).
 
 ## Prerequisites
 
@@ -29,27 +29,27 @@ the marker.
 
 Create Pydantic schemas in `src/api/schemas/`. Request schemas inherit from `BaseRequestSchema` and response schemas from `BaseResponseSchema` (both defined in `src/api/schemas/base.py`). They share common config from `BaseSchema` — see the file for the full `ConfigDict`. Key behaviors: `extra="forbid"` rejects unknown fields, `alias_generator=to_camel` converts snake_case to camelCase, and `from_attributes=True` enables ORM-style attribute access. `BaseResponseSchema` additionally sets `serialize_by_alias=True` so responses serialize using camelCase.
 
-**Request** (`src/api/schemas/request/<name>.py`):
+**Request** (`src/api/schemas/request/my_thing.py`):
 ```python
 from pydantic import Field
 
 from api.schemas.base import BaseRequestSchema
 
 
-class MyRequest(BaseRequestSchema):
+class MyThingRequest(BaseRequestSchema):
     """Request schema for the new endpoint."""
 
     field_name: str = Field(description="Description of the field.")
 ```
 
-**Response** (`src/api/schemas/response/<name>.py`):
+**Response** (`src/api/schemas/response/my_thing.py`):
 ```python
 from pydantic import Field
 
 from api.schemas.base import BaseResponseSchema
 
 
-class MyResponse(BaseResponseSchema):
+class MyThingResponse(BaseResponseSchema):
     """Response schema for the new endpoint."""
 
     result: str = Field(description="Description of the result.")
@@ -57,60 +57,61 @@ class MyResponse(BaseResponseSchema):
 
 ### 2. Add Service Function
 
-Create the service function in `src/api/services/<name>.py`. Services contain the business logic — they parse schemas, process data, and serialize results back.
+Create the service function in `src/api/services/my_thing.py`. Services contain the business logic — they parse schemas, process data, and serialize results back.
 
 For simple endpoints, the service can process directly:
 
 ```python
-from api.schemas.request.my_request import MyRequest
-from api.schemas.response.my_response import MyResponse
+from api.schemas.request.my_thing import MyThingRequest
+from api.schemas.response.my_thing import MyThingResponse
 
 
-def run_my_service(request: MyRequest) -> MyResponse:
+def run_my_thing_service(request: MyThingRequest) -> MyThingResponse:
     """Orchestrate: parse → process → return."""
     processed = request.field_name.strip().upper()
-    return MyResponse(result=processed)
+    return MyThingResponse(result=processed)
 ```
 
 For non-trivial endpoints with business logic, the service converts Pydantic schemas to domain models, processes, and serializes back. Create domain models in `models/` as needed:
 
 ```python
-from api.schemas.request.my_request import MyRequest
-from api.schemas.response.my_response import MyResponse
-from models.my_model import MyItem
+from api.schemas.request.my_thing import MyThingRequest
+from api.schemas.response.my_thing import MyThingResponse
+from models.my_thing import MyThing
 
 
-def run_my_service(request: MyRequest) -> MyResponse:
+def run_my_thing_service(request: MyThingRequest) -> MyThingResponse:
     """Parse schema → process with domain model → serialize result."""
-    item = MyItem(field_name=request.field_name)
+    item = MyThing(field_name=request.field_name)
     result = item.process()
-    return MyResponse(result=result)
+    return MyThingResponse(result=result)
 ```
 
-> Create `src/models/my_model.py` for domain models — `src/models/base.py` exists as the base. For complex processing, keep pure functions in the model or a utility module under `src/utils/`.
+> Create `src/models/my_thing.py` for domain models — `src/models/base.py` exists as the base. For complex processing, keep pure functions in the model or a utility module under `src/utils/`.
 
 ### 3. Add Router
 
-Create the endpoint handler in `src/api/routers/<name>.py`:
+Create the endpoint handler in `src/api/routers/my_thing.py`:
 
 ```python
 from fastapi import APIRouter
 
-from api.schemas.request.my_request import MyRequest
-from api.schemas.response.my_response import MyResponse
-from api.services.my_service import run_my_service
+from api.schemas.request.my_thing import MyThingRequest
+from api.schemas.response.my_thing import MyThingResponse
+from api.services.my_thing import run_my_thing_service
 
 router = APIRouter()
 
 
 @router.post(
-    "/my-endpoint",
-    response_model=MyResponse,
+    "/my-thing",
+    response_model=MyThingResponse,
+    status_code=201,
     summary="Short description for OpenAPI docs",
 )
-async def my_endpoint(body: MyRequest) -> MyResponse:
+async def create_my_thing(body: MyThingRequest) -> MyThingResponse:
     """One-line docstring."""
-    return run_my_service(body)
+    return run_my_thing_service(body)
 ```
 
 ### 4. Register the Router
@@ -126,18 +127,18 @@ class APITags(StrEnum):
 In `src/api/routes.py`, import the router module and register it on the root `router`:
 
 ```python
-from api.routers import my_endpoint
+from api.routers import my_thing
 from api.tags import APITags
 
 # `router` is the root APIRouter defined at the top of this file
-router.include_router(my_endpoint.router, tags=[APITags.MY_TAG])
+router.include_router(my_thing.router, tags=[APITags.MY_TAG])
 ```
 
-Note: `my_endpoint.router` refers to the `router = APIRouter()` instance inside `src/api/routers/my_endpoint.py`. The import name matches the filename (e.g., `example.py` → `from api.routers import example`).
+Note: `my_thing.router` refers to the `router = APIRouter()` instance inside `src/api/routers/my_thing.py`. The import name matches the filename (e.g., `example.py` → `from api.routers import example`).
 
 ### 5. Add Tests
 
-Create `test/test_api/test_my_endpoint.py`:
+Create `test/test_api/test_my_thing.py`:
 
 ```python
 import pytest
@@ -145,10 +146,10 @@ from fastapi.testclient import TestClient
 
 
 @pytest.mark.unit
-def test_my_endpoint_success(client: TestClient) -> None:
-    """POST /my-endpoint returns expected result."""
-    response = client.post("/my-endpoint", json={"fieldName": "value"})
-    assert response.status_code == 200
+def test_create_my_thing_success(client: TestClient) -> None:
+    """POST /my-thing returns expected result."""
+    response = client.post("/my-thing", json={"fieldName": "value"})
+    assert response.status_code == 201
     assert response.json()["result"] == "VALUE"
 ```
 
@@ -157,7 +158,7 @@ def test_my_endpoint_success(client: TestClient) -> None:
 After creating all files:
 1. Start the server (`python src/main.py`) — confirm no import errors
 2. Open Swagger docs — verify the new endpoint appears under its tag
-3. Run tests from the project root (`python -m pytest test/test_api/test_my_endpoint.py`) — confirm tests pass
+3. Run tests from the project root (`python -m pytest test/test_api/test_my_thing.py`) — confirm tests pass
 4. Run `ruff check src/` — confirm no lint errors
 
 ## Rules
@@ -165,6 +166,7 @@ After creating all files:
 - **Tests are mandatory** — never add or change an endpoint, service, or router without new or updated pytest coverage under `test/` in the same change.
 - **Services contain business logic** — parse schemas → process → serialize response.
 - **One service function per endpoint**.
+- **Apply auth by default when the project has it** — if `src/api/dependencies/auth.py` exists, add the project's auth dependency (`user_id: str = Depends(get_current_user)`) to new endpoints unless the route is deliberately public. Use `status_code=201` on create endpoints.
 - NEVER use raw `dict` or unvalidated data in services — always use Pydantic schemas or domain models
 - NEVER forget to register the router in `src/api/routes.py` and add the tag to `src/api/tags.py`
 

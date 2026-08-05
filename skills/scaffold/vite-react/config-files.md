@@ -7,7 +7,7 @@
 
 > Set `"name"` to the project name (kebab-case) before `pnpm install`. Dependency versions use caret floors aligned with `.claude/rules/vite-react.md` and the current stable; `pnpm install` resolves the newest compatible. shadcn/ui Radix primitives and `@hookform/resolvers` are intentionally omitted — they are added by `npx shadcn@latest add` (Step 4) and `npx shadcn@latest add form` respectively. `@testing-library/jest-dom` and `@testing-library/react` are included in devDependencies; only `@testing-library/user-event` is added later by `templatecentral:add (test)`. Run the review utility (update mode — `cat "<skill-dir>/../review/SKILL.md"`) post-scaffold to freshen pins.
 >
-> **ESLint pinned at `^9`** — `eslint-plugin-react-hooks` 7.x peer-supports only `^9`; bumping to ESLint 10 breaks `pnpm install` under strict peer enforcement until the plugin ships ESLint 10 support. Do not upgrade eslint past `^9` without verifying `eslint-plugin-react-hooks` peer compatibility.
+> **ESLint pinned at `^9`** — `^9` is the flat-config baseline every plugin in this devDependency set is verified against, so it is the known-good floor for a fresh scaffold. `eslint-plugin-react-hooks` 7.1.1 already peer-supports `^10`, so an ESLint 10 bump is not blocked by peers; it just needs `typescript-eslint`, `@eslint/js`, and `eslint-plugin-sonarjs` re-verified together before moving. Run the review utility (update mode) when you want to move the whole lint toolchain forward as one unit.
 
 ```json
 {
@@ -15,7 +15,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "packageManager": "pnpm@11.10.0",
+  "packageManager": "pnpm@11.18.0",
   "engines": {
     "node": ">=24"
   },
@@ -60,10 +60,10 @@
     "@vitest/coverage-v8": "^4.1.8",
     "eslint": "^9.0.0",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-sonarjs": "4.1.0",
+    "eslint-plugin-sonarjs": "^4.2.0",
     "globals": "^17.6.0",
     "lefthook": "^2.1.9",
-    "jsdom": "^29.1.1",
+    "jsdom": "^30.0.1",
     "prettier": "^3.8.3",
     "prettier-plugin-organize-imports": "^4.3.0",
     "prettier-plugin-tailwindcss": "^0.8.0",
@@ -93,6 +93,14 @@ pnpm-lock.yaml
 lefthook.yml
 .github/
 .gitleaks.toml
+
+# Governance markdown — human-approved (protect-files.sh gates AGENTS.md) and
+# alignment-sensitive. Prettier reflows headings and collapses the padded
+# file-layout tables, silently drifting them from the approved content.
+AGENTS.md
+CLAUDE.md
+docs/CONSTITUTION.md
+FUTURE.md
 ```
 
 ### `Dockerfile`
@@ -479,8 +487,8 @@ Update the `<title>` to the project name during scaffolding.
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { dirname, resolve } from 'path';
-import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

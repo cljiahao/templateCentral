@@ -81,12 +81,10 @@ def configure_exceptions(app: FastAPI) -> None:
         )
         # Allow services to attach field-level errors to the exception
         field_errors = getattr(exc, 'field_errors', {})
-        content = {
-            "error": str(exc),
-            "details": {"code": "INVALID_INPUT"}
-        }
+        details: dict[str, Any] = {"code": "INVALID_INPUT"}
         if field_errors:
-            content["details"]["fieldErrors"] = field_errors
+            details["fieldErrors"] = field_errors
+        content = {"error": str(exc), "details": details}
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content=content,
@@ -125,7 +123,7 @@ def configure_exceptions(app: FastAPI) -> None:
             path=request.url.path, code="VALIDATION_ERROR",
         )
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content={
                 "error": "Validation failed",
                 "details": {"fieldErrors": field_errors, "code": "VALIDATION_ERROR"},
@@ -148,43 +146,57 @@ def configure_exceptions(app: FastAPI) -> None:
 
 **2. API Endpoint Example**
 
+Schemas live in their own modules, one per direction — never inline in the router.
+
 ```python
-# src/api/projects/routes.py
-from fastapi import APIRouter, status
-from pydantic import BaseModel, Field
+# src/api/schemas/request/project.py
+from pydantic import Field
 
 from api.schemas.base import BaseRequestSchema
-from core.exceptions import InvalidInputError
-
-router = APIRouter(prefix="/projects", tags=["projects"])
 
 
 class CreateProjectRequest(BaseRequestSchema):
     name: str = Field(..., min_length=1, max_length=100)
     description: str | None = Field(None, max_length=500)
+```
+
+```python
+# src/api/schemas/response/project.py
+from pydantic import Field
+
+from api.schemas.base import BaseResponseSchema
 
 
-class ProjectResponse(BaseModel):
-    id: str
-    name: str
-    description: str | None
+class ProjectResponse(BaseResponseSchema):
+    id: str = Field(description="Project ID.")
+    name: str = Field(description="Project name.")
+    description: str | None = Field(default=None, description="Project description.")
+```
+
+```python
+# src/api/routers/projects.py
+from fastapi import APIRouter, status
+
+from api.schemas.request.project import CreateProjectRequest
+from api.schemas.response.project import ProjectResponse
+from core.exceptions import InvalidInputError, NoResultsFound
+
+router = APIRouter(prefix="/projects", tags=["projects"])
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=ProjectResponse)
 async def create_project(req: CreateProjectRequest) -> ProjectResponse:
     """Create a new project."""
-    # Your logic: project = await db.projects.insert(req.model_dump())
-    return ProjectResponse(id="1", name=req.name, description=req.description)
+    raise NotImplementedError("Call the project service to persist the request.")
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(project_id: str) -> ProjectResponse:
     """Get a project by ID."""
-    # Your logic: project = await db.projects.find_by_id(project_id)
-    # if not project:
-    #     raise NoResultsFound("Project not found")
-    return ProjectResponse(id=project_id, name="Sample Project", description=None)
+    raise NotImplementedError("Call the project service; raise NoResultsFound when the lookup returns nothing.")
 ```
+
+Replace each `raise NotImplementedError` with a call into the service layer. The service raises `InvalidInputError` for domain validation failures (→ 400) and `NoResultsFound` for missing records (→ 404); both are turned into the structured envelope by the handlers in Section 1.
 
 **2b. Wiring (Already Present — No Changes Needed)**
 

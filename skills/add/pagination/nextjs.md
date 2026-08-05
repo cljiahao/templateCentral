@@ -59,63 +59,45 @@ export interface PaginatedResponse<T> {
 }
 ```
 
-**3. Pagination Service (Business Logic)**
+**3. Pagination Helpers (Business Logic)**
 
 ```ts
 // src/lib/pagination/pagination-service.ts
 import { PaginationMetadata } from '@/lib/types/pagination';
 
-export class PaginationService {
-  /**
-   * Calculate offset from page number
-   * @param page - Page number (1-indexed)
-   * @param limit - Items per page
-   * @returns Offset (0-indexed)
-   */
-  static calculateOffset(page: number, limit: number): number {
-    return (page - 1) * limit;
+// Pages are 1-indexed in the API surface, 0-indexed at the query layer
+export function calculateOffset(page: number, limit: number): number {
+  return (page - 1) * limit;
+}
+
+export function createMetadata(page: number, limit: number, total: number): PaginationMetadata {
+  return {
+    page,
+    limit,
+    total,
+    hasMore: page * limit < total,
+  };
+}
+
+// Returns null for any sort string that is malformed or names a field outside
+// allowedFields — the whitelist is what keeps the value out of the ORM's orderBy.
+// Callers map the returned field/direction to their own ORM column.
+export function parseSortParam(
+  sort: string | undefined,
+  allowedFields: string[]
+): { field: string; direction: 'asc' | 'desc' } | null {
+  if (!sort) return null;
+
+  // Split on the FIRST underscore only — field names may be snake_case (e.g. desc_created_at)
+  const separatorIndex = sort.indexOf('_');
+  if (separatorIndex === -1) return null;
+  const direction = sort.slice(0, separatorIndex);
+  const field = sort.slice(separatorIndex + 1);
+  if (!allowedFields.includes(field) || !['asc', 'desc'].includes(direction)) {
+    return null;
   }
 
-  /**
-   * Create pagination metadata for response
-   * @param page - Current page
-   * @param limit - Items per page
-   * @param total - Total item count
-   * @returns Pagination metadata
-   */
-  static createMetadata(page: number, limit: number, total: number): PaginationMetadata {
-    return {
-      page,
-      limit,
-      total,
-      hasMore: page * limit < total,
-    };
-  }
-
-  /**
-   * Parse sort parameter into a field/direction pair.
-   * @param sort - Sort string: "asc_name" or "desc_createdAt"
-   * @param allowedFields - Whitelist of allowed field names
-   * @returns { field, direction } or null if invalid — caller maps to ORM-specific orderBy
-   */
-  static parseSortParam(
-    sort: string | undefined,
-    allowedFields: string[]
-  ): { field: string; direction: 'asc' | 'desc' } | null {
-    if (!sort) return null;
-
-    // Split on the FIRST underscore only — field names may be snake_case (e.g. desc_created_at)
-    const separatorIndex = sort.indexOf('_');
-    if (separatorIndex === -1) return null;
-    const direction = sort.slice(0, separatorIndex);
-    const field = sort.slice(separatorIndex + 1);
-    if (!allowedFields.includes(field) || !['asc', 'desc'].includes(direction)) {
-      // Invalid sort - caller should reject
-      return null;
-    }
-
-    return { field, direction: direction as 'asc' | 'desc' };
-  }
+  return { field, direction: direction as 'asc' | 'desc' };
 }
 ```
 
@@ -126,7 +108,7 @@ export class PaginationService {
 import { handleApiError } from '@/lib/errors';
 import { withLogging } from '@/lib/utils/with-logging';
 import { paginationSchema } from '@/lib/validation/schemas';
-import { PaginationService } from '@/lib/pagination/pagination-service';
+import { calculateOffset, createMetadata, parseSortParam } from '@/lib/pagination/pagination-service';
 import { NextResponse } from 'next/server';
 import { asc, count, desc } from 'drizzle-orm';
 import { db, projects } from '@/integrations/database';
@@ -159,7 +141,7 @@ export const GET = withLogging(async (request) => {
 
     const { page, limit, sort } = parsed.data;
 
-    const sortParam = PaginationService.parseSortParam(sort, [...ALLOWED_SORT_FIELDS]);
+    const sortParam = parseSortParam(sort, [...ALLOWED_SORT_FIELDS]);
     if (sort && !sortParam) {
       return NextResponse.json(
         {
@@ -176,7 +158,7 @@ export const GET = withLogging(async (request) => {
         : desc(SORT_COLUMNS[sortParam.field as SortField])
       : desc(projects.createdAt);
 
-    const offset = PaginationService.calculateOffset(page, limit);
+    const offset = calculateOffset(page, limit);
     const [rows, [{ total }]] = await Promise.all([
       db
         .select({ id: projects.id, name: projects.name, description: projects.description })
@@ -190,7 +172,7 @@ export const GET = withLogging(async (request) => {
     return NextResponse.json({
       data: {
         items: rows,
-        pagination: PaginationService.createMetadata(page, limit, Number(total)),
+        pagination: createMetadata(page, limit, Number(total)),
       },
     });
   } catch (error) {

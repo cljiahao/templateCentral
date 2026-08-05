@@ -71,7 +71,11 @@ export class GithubClient extends FetchClient {
   }
 
   async getRepo(owner: string, repo: string) {
-    return this.request<GithubRepo>(`repos/${owner}/${repo}`);
+    // FetchClient.request concatenates the path onto the base URL — encode every
+    // interpolated segment so a value like `../../` cannot traverse off the intended path
+    return this.request<GithubRepo>(
+      `repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+    );
   }
 }
 ```
@@ -80,6 +84,7 @@ export class GithubClient extends FetchClient {
 
 ```ts
 // src/integrations/services/github-service.ts
+import { APIError } from '@/integrations/error';
 import type { GithubClient } from '../clients/github-client';
 import { githubRepoSchema, type GithubRepo } from '../schemas/github-schemas';
 
@@ -88,7 +93,15 @@ export class GithubService {
 
   async getRepos(): Promise<GithubRepo[]> {
     const data = await this.client.getRepos();
-    return githubRepoSchema.array().parse(data);
+    // safeParse, not parse — a raw ZodError escaping the integration layer bypasses
+    // the APIError contract every consumer of this layer relies on
+    const parsed = githubRepoSchema.array().safeParse(data);
+
+    if (!parsed.success) {
+      throw new APIError({ statusCode: 502, data: { message: 'Invalid GitHub API response' } });
+    }
+
+    return parsed.data;
   }
 }
 ```

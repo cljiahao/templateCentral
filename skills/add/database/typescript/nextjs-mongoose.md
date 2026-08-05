@@ -39,7 +39,13 @@ export async function connectDB(): Promise<typeof mongoose> {
   if (cached.conn) return cached.conn;
 
   if (!cached.promise) {
-    cached.promise = mongoose.connect(MONGODB_URL);
+    cached.promise = mongoose.connect(MONGODB_URL, {
+      // Fail fast instead of holding a serverless invocation open for the 30s default
+      serverSelectionTimeoutMS: 5_000,
+      // Each serverless instance keeps its own pool — a small cap avoids exhausting
+      // the cluster's connection limit as instances scale out
+      maxPoolSize: 10,
+    });
   }
 
   cached.conn = await cached.promise;
@@ -48,6 +54,8 @@ export async function connectDB(): Promise<typeof mongoose> {
 ```
 
 > **Why the cached pattern**: Next.js hot-reloads modules in development. The `globalThis` cache prevents opening duplicate MongoDB connections.
+
+> **TLS in transit is required for any non-local cluster** — the localhost `MONGODB_URL` below is a development default only. Append `?tls=true` to `MONGODB_URL` for a self-hosted or DocumentDB cluster (the IAM variant below does exactly this); `mongodb+srv://` URLs, as used by Atlas, enable TLS implicitly. Never disable certificate validation (`tlsAllowInvalidCertificates`) to work around a handshake failure — install the cluster's CA instead.
 
 ##### IAM Auth Variant
 

@@ -45,12 +45,24 @@ const config = {
   reporters: ["html", "clear-text", "progress", "json"],
   htmlReporter: { fileName: "stryker-report.html" },
   jsonReporter: { fileName: "stryker-report.json" },
+  // Without an explicit mutate glob Stryker mutates everything under src/, including
+  // files the project's test policy never covers — every such mutant survives and
+  // drags the kill rate down for no signal. Replace with your stack's row below.
+  mutate: ["src/**/*.ts", "src/**/*.tsx"],
   // report-only: set break to a number (e.g. 70) to enforce a kill-rate floor
   thresholds: { break: null },
 };
 
 export default config;
 ```
+
+Set `mutate` to match what your stack's test policy actually covers:
+
+| Stack | `mutate` |
+|---|---|
+| Next.js | `["src/app/api/**/*.ts"]` — the test policy covers API routes under `src/app/api/**`, not React UI |
+| NestJS | `["src/**/*.ts", "!src/main.ts"]` — all backend code except the bootstrap entrypoint |
+| Vite + React | `["src/**/*.ts", "src/**/*.tsx"]` — the default above; the SPA's own tests cover components |
 
 #### Step 2 — Add npm script
 
@@ -81,17 +93,16 @@ If `.github/workflows/` exists, add a `mutation` job to the primary workflow. It
     needs: [test]
     continue-on-error: true
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
         with:
           version: "11"
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "24"
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
       - run: pnpm mutation
-        continue-on-error: true
 ```
 
 ### Validate

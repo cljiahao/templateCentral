@@ -230,7 +230,10 @@ export class User {
   @Prop({ required: true })
   name: string;
 
-  @Prop({ required: true })
+  // `select: false` keeps the hash out of every query result by default — without it
+  // any `findOne`/`find` that serializes a user document leaks the password hash.
+  // Opt back in explicitly with `.select('+hashedPassword')` where it is actually needed.
+  @Prop({ required: true, select: false })
   hashedPassword: string;
 }
 
@@ -248,6 +251,11 @@ import { Model } from 'mongoose';
 
 import { User, type UserDocument } from './schemas/user.schema';
 import type { LoginDto, RegisterDto } from './auth.dto';
+
+// Verified on the miss path so an unknown email costs the same as a wrong
+// password — without it, response timing leaks which accounts exist.
+const DUMMY_HASH =
+  '$argon2id$v=19$m=65536,t=3,p=1$c29tZXNhbHRzb21lc2E$Rdo0OMHkQXBTOTBqNCn0mPvBGiLxvGBIbxKZ0nJ0Aqo';
 
 @Injectable()
 export class AuthService {
@@ -271,8 +279,16 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const user = await this.userModel.findOne({ email: dto.email }).exec();
-    if (!user || !(await argon2.verify(user.hashedPassword, dto.password))) {
+    // `hashedPassword` is `select: false` on the schema — opt in only here.
+    const user = await this.userModel
+      .findOne({ email: dto.email })
+      .select('+hashedPassword')
+      .exec();
+    const passwordOk = await argon2.verify(
+      user?.hashedPassword ?? DUMMY_HASH,
+      dto.password,
+    );
+    if (!user || !passwordOk) {
       throw new UnauthorizedException('Invalid credentials.');
     }
     return {

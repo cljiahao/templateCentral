@@ -6,7 +6,7 @@
 
 A structured workflow for complex, multi-step tasks. This protocol ensures the agent plans before acting, validates at each step, and leaves a trail for future agents.
 
-Task management is "enabled" when the project's `AGENTS.md` contains a `## Task Management` section referencing this protocol — added at scaffold time if the user opts in (see repository root `AGENTS.md`, **Scaffold: optional Task Management**).
+Task management is "enabled" when the project's `AGENTS.md` contains a `## Task Management` section referencing this protocol — appended at scaffold time if the user opts in, from the option block each stack's `scaffold/<stack>/source-files.md` carries.
 
 > **If `superpowers` is installed:** prefer its brainstorm → plan → execute workflow, which includes task tracking. Use this protocol only if superpowers is not available or the user explicitly requests it.
 
@@ -19,7 +19,7 @@ Skip this protocol when:
 - Single-file changes (rename, add a constant, fix a typo)
 - The user asks for something quick and specific
 
-For **test coverage workflow** (separate AI sessions for writing vs reviewing tests), see repository root `AGENTS.md` → **Independent test workflow** — complementary to this protocol, not a replacement.
+For **test coverage workflow**, run the writing pass and the reviewing pass as separate AI sessions: one session writes the tests, a fresh session reviews them against the implementation without the first session's context. Complementary to this protocol, not a replacement.
 
 ## The 6 Steps
 

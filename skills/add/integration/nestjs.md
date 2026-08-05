@@ -60,24 +60,75 @@ export type GithubRepo = z.infer<typeof githubRepoSchema>;
 **`src/modules/<name>-integration/<name>-integration.service.ts`**:
 
 ```typescript
-import { Injectable } from '@nestjs/common';
+import {
+  BadGatewayException,
+  GatewayTimeoutException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
+import { AxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
 
 import { githubRepoSchema, type GithubRepo } from './<name>-integration.schemas';
 
+const UPSTREAM = '/user/repos';
+
 @Injectable()
 export class GithubIntegrationService {
+  private readonly logger = new Logger(GithubIntegrationService.name);
+
   constructor(private readonly http: HttpService) {}
 
   async listRepos(): Promise<GithubRepo[]> {
-    const { data } = await firstValueFrom(
-      this.http.get<unknown[]>('/user/repos'),
-    );
-    return data.map((r: unknown) => githubRepoSchema.parse(r));
+    let data: unknown[];
+
+    try {
+      ({ data } = await firstValueFrom(this.http.get<unknown[]>(UPSTREAM)));
+    } catch (error) {
+      // NEVER log the raw AxiosError: `error.config.headers` carries the outbound
+      // `Authorization: Bearer <token>`, so a raw dump writes the credential to the log.
+      // Status and path are the only safe fields.
+      const status =
+        error instanceof AxiosError ? (error.response?.status ?? 0) : 0;
+      const timedOut =
+        error instanceof AxiosError &&
+        (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT');
+
+      this.logger.error(`GitHub ${UPSTREAM} failed with status ${status}`);
+
+      if (timedOut) throw new GatewayTimeoutException('Upstream timed out.');
+      throw new BadGatewayException('Upstream request failed.');
+    }
+
+    // safeParse, not parse: a raw ZodError is not an HttpException, so it would escape
+    // HttpExceptionFilter as an unformatted 500 — and one malformed row would discard
+    // the entire list. Skip the bad rows and record how many were dropped.
+    const repos: GithubRepo[] = [];
+    let skipped = 0;
+
+    for (const row of data) {
+      const parsed = githubRepoSchema.safeParse(row);
+      if (parsed.success) repos.push(parsed.data);
+      else skipped += 1;
+    }
+
+    if (skipped > 0) {
+      this.logger.warn(
+        `Discarded ${skipped} malformed repo(s) from GitHub ${UPSTREAM}`,
+      );
+    }
+
+    return repos;
   }
 }
 ```
+
+> **When a malformed row is not skippable** — for example a payment or balance response
+> where a partial list is worse than an error — throw instead:
+> `throw new BadGatewayException('Upstream returned an unexpected shape.')`. Never rethrow
+> the `ZodError` itself and never put its `issues` in the response body; the paths leak
+> the upstream schema.
 
 #### 4. Add Config
 
@@ -176,7 +227,8 @@ Confirm the server starts with no DI or import errors.
 ### Rules
 
 - Use `@nestjs/axios` + `HttpModule` — not raw `axios` or `fetch`
-- Validate all external responses with Zod schemas — external data is untrusted
+- Validate all external responses with Zod schemas — external data is untrusted. Use `safeParse`; a bare `.parse()` throws a `ZodError`, which is not an `HttpException` and escapes `HttpExceptionFilter` as an unformatted 500
+- Wrap every upstream call in try/catch and convert failures to `BadGatewayException` / `GatewayTimeoutException` — NEVER log the raw error object, whose `config.headers` contains the outbound `Authorization` token. Log status and path only
 - Configure `HttpModule.register()` with `baseURL`, auth headers, and timeout
 - Export the service from the integration module so other modules can import it
 - Keep API tokens in environment variables — NEVER hardcode

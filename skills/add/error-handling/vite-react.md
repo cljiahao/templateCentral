@@ -35,39 +35,29 @@ componentDidCatch(error: Error, errorInfo: ErrorInfo) {
 
 Everything else (state, fallback rendering, retry button) stays as scaffolded.
 
-**2. Async Errors (Already Wired — Route Through `global-handlers.ts`)**
+**2. Async Errors (Complete As Scaffolded — No Changes)**
 
-The scaffold already ships `src/lib/errors/global-handlers.ts` — `registerGlobalErrorHandlers()` listens for both `window.onerror` and `unhandledrejection`, and it is already called in `main.tsx`. Do NOT add a second `unhandledrejection` listener or a second `main.tsx` wiring — route reporting through `logError` inside the existing handler instead:
-
-```ts
-// src/lib/errors/global-handlers.ts — extend the existing handler
-import { logError } from './error-log-handler';
-
-// Inside the existing unhandledrejection listener, replace the current
-// console/report line with a logError call:
-window.addEventListener('unhandledrejection', (event) => {
-  const error = event.reason;
-  logError('Unhandled promise rejection', error instanceof Error ? error : new Error(String(error)));
-});
-
-// Inside the existing window.onerror handler, likewise report via logError:
-window.addEventListener('error', (event) => {
-  logError('Uncaught error', event.error instanceof Error ? event.error : new Error(String(event.message)));
-});
-```
-
-The `registerGlobalErrorHandlers()` call already present in `main.tsx` stays as-is — no new wiring.
+Async error coverage needs no work. `src/lib/errors/global-handlers.ts` already listens for both `window.onerror` and `unhandledrejection` and already routes each through `logError`, and `registerGlobalErrorHandlers()` is already called in `main.tsx`. Leave the file and the `main.tsx` wiring alone — adding a second listener or a second bootstrap call double-logs every async error.
 
 **3. React Query Error Handler**
 
+> **Behavior change vs. the scaffold.** The scaffolded `providers.tsx` client uses `staleTime: 60 * 1000` (1 min) with `refetchOnWindowFocus: false`. The options below raise `staleTime` to 5 min and drop the `refetchOnWindowFocus` override (so it reverts to TanStack's default `true` — every tab focus refetches stale queries). Keep the scaffold's values instead if you did not intend that; only the cache handlers are required for error logging.
+
 ```ts
 // src/lib/clients/query-client.ts
-import { MutationCache, QueryClient } from '@tanstack/react-query';
+import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 import { logError } from '@/lib/errors/error-log-handler';
 
 export const queryClient = new QueryClient({
-  // MutationCache onError always fires — a per-mutation onError would silently
-  // replace a handler placed in defaultOptions.mutations.onError.
+  // Cache-level onError always fires — a per-query/per-mutation onError would
+  // silently replace a handler placed in defaultOptions.
+  queryCache: new QueryCache({
+    onError: (error, query) => {
+      if (error instanceof Error) {
+        logError(`Query failed: ${String(query.queryKey[0])}`, error);
+      }
+    },
+  }),
   mutationCache: new MutationCache({
     onError: (error) => {
       if (error instanceof Error) {
@@ -78,7 +68,8 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      staleTime: 1000 * 60 * 5,
+      staleTime: 60 * 1000,
+      refetchOnWindowFocus: false,
     },
   },
 });

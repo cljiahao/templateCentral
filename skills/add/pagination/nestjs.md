@@ -120,82 +120,34 @@ export class ProjectsModule {}
 
 **4. Controller with Pagination**
 
+Sort parsing, offset math, and row mapping are business logic and belong in the service
+(`.claude/rules/nestjs.md`: *NEVER put business logic in controllers*). The controller only
+declares the contract and delegates.
+
 ```ts
 // src/modules/projects/projects.controller.ts
-import {
-  Controller,
-  Get,
-  Query,
-  HttpException,
-  HttpStatus,
-} from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { ProjectsService } from './projects.service';
-import { PaginationService } from '../../common/services/pagination.service';
 import { PaginationDto } from './dto/pagination.dto';
-import type { PaginationMetadata, PaginatedResponse } from '../../common/dto/pagination.dto';
+import type { PaginatedResponse } from '../../common/dto/pagination.dto';
 import { ProjectDto } from './dto/project.dto';
-
-const ALLOWED_SORT_FIELDS = ['name', 'createdAt', 'updatedAt'];
 
 @ApiTags('projects')
 @Controller('projects')
 export class ProjectsController {
-  constructor(
-    private readonly projectsService: ProjectsService,
-    private readonly paginationService: PaginationService
-  ) {}
+  constructor(private readonly projectsService: ProjectsService) {}
 
   @Get()
   @ApiOperation({ summary: 'List projects with pagination' })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 10 })
   @ApiQuery({ name: 'sort', required: false, example: 'asc_name' })
+  // The scaffold's global APP_PIPE ZodValidationPipe validates PaginationDto — no explicit pipe needed
   async list(
-    // The scaffold's global APP_PIPE ZodValidationPipe validates PaginationDto — no explicit pipe needed
-    @Query() query: PaginationDto
+    @Query() query: PaginationDto,
   ): Promise<PaginatedResponse<ProjectDto>> {
-    // Validate sort field
-    const orderBy = this.paginationService.parseSortParam(
-      query.sort,
-      ALLOWED_SORT_FIELDS
-    );
-    if (query.sort && !orderBy) {
-      throw new HttpException(
-        {
-          error: 'Invalid sort field',
-          details: {
-            fieldErrors: {
-              sort: [`Must be one of: ${ALLOWED_SORT_FIELDS.join(', ')}`],
-            },
-          },
-        },
-        HttpStatus.BAD_REQUEST
-      );
-    }
-
-    // Get paginated results
-    const offset = this.paginationService.calculateOffset(query.page, query.limit);
-    const [projects, total] = await this.projectsService.getProjects(
-      offset,
-      query.limit,
-      orderBy  // { field, direction } | null
-    );
-
-    // Build response
-    const metadata = this.paginationService.createMetadata(
-      query.page,
-      query.limit,
-      total
-    );
-
-    return {
-      data: {
-        // createZodDto classes have no mapping constructor — validate rows via the static schema
-        items: projects.map((p) => ProjectDto.schema.parse(p)),
-        pagination: metadata,
-      },
-    };
+    return await this.projectsService.listProjects(query);
   }
 }
 ```
@@ -204,11 +156,15 @@ export class ProjectsController {
 
 ```ts
 // src/modules/projects/projects.service.ts
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { asc, count, desc } from 'drizzle-orm';
 
+import { PaginationService } from '../../common/services/pagination.service';
+import type { PaginatedResponse } from '../../common/dto/pagination.dto';
 import { DrizzleService } from '../../database/drizzle.service';
 import { projects } from '../../database/schema';
+import type { PaginationParams } from './dto/pagination.dto';
+import { ProjectDto } from './dto/project.dto';
 
 type SortField = 'name' | 'createdAt' | 'updatedAt';
 const SORT_COLUMNS = {
@@ -217,11 +173,53 @@ const SORT_COLUMNS = {
   updatedAt: projects.updatedAt,
 } as const;
 
+// Derived from SORT_COLUMNS so the allow-list can never drift from the sortable columns.
+const ALLOWED_SORT_FIELDS = Object.keys(SORT_COLUMNS);
+
 @Injectable()
 export class ProjectsService {
-  constructor(private readonly drizzle: DrizzleService) {}
+  constructor(
+    private readonly drizzle: DrizzleService,
+    private readonly pagination: PaginationService,
+  ) {}
 
-  async getProjects(
+  async listProjects(
+    query: PaginationParams,
+  ): Promise<PaginatedResponse<ProjectDto>> {
+    const orderBy = this.pagination.parseSortParam(
+      query.sort,
+      ALLOWED_SORT_FIELDS,
+    );
+    if (query.sort && !orderBy) {
+      // The body is pre-built in the filter's ErrorResponse shape so the allowed field
+      // list survives HttpExceptionFilter — see the coupling note below.
+      throw new BadRequestException({
+        error: 'Invalid sort field',
+        details: {
+          fieldErrors: {
+            sort: [`Must be one of: ${ALLOWED_SORT_FIELDS.join(', ')}`],
+          },
+        },
+      });
+    }
+
+    const offset = this.pagination.calculateOffset(query.page, query.limit);
+    const [rows, total] = await this.getProjects(offset, query.limit, orderBy);
+
+    return {
+      data: {
+        // createZodDto classes have no mapping constructor — validate rows via the static schema
+        items: rows.map((p) => ProjectDto.schema.parse(p)),
+        pagination: this.pagination.createMetadata(
+          query.page,
+          query.limit,
+          total,
+        ),
+      },
+    };
+  }
+
+  private async getProjects(
     offset: number,
     limit: number,
     sortParam: { field: string; direction: 'asc' | 'desc' } | null,
@@ -241,6 +239,19 @@ export class ProjectsService {
   }
 }
 ```
+
+> **Coupling with `add/error-handling/nestjs`.** `HttpExceptionFilter` rewrites the body of
+> most 400s to a generic `{ error: 'Bad request', details: { code: 'BAD_REQUEST' } }`. If
+> that happens here, the client never learns which sort fields are valid and the endpoint
+> becomes guesswork. The filter therefore passes a 400 body through unchanged when it is
+> already an object carrying an `error` key — which is exactly the shape thrown above.
+> **If you edit that filter, preserve the pass-through branch**, and after any change
+> confirm with:
+>
+> ```bash
+> curl 'http://localhost:3000/projects?sort=asc_bogus'
+> # Must list the allowed fields, NOT collapse to {"error":"Bad request"}
+> ```
 
 ## Validate
 

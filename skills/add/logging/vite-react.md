@@ -10,7 +10,9 @@
 - `src/lib/errors/global-handlers.ts` — `registerGlobalErrorHandlers()` wiring `window.onerror` + `unhandledrejection`, registered in `main.tsx`. Together with the ErrorBoundary this is full client-side error coverage: render-phase (boundary) + async/event/promise (global handlers).
 - `src/lib/errors/index.ts` — barrel re-exporting `logError` and `registerGlobalErrorHandlers`
 
-> **Coverage rule (the client analogue of "wrap every route"):** every uncaught error must reach `logError`, and every API call must flow through one logged client (`src/lib/clients/`), never a raw `fetch`. The ErrorBoundary + global handlers cover the first; keep all data-fetching in the shared client for the second.
+> **Coverage rule (the client analogue of "wrap every route"):** every uncaught error must reach `logError`, and every API call should flow through one logged client (`src/lib/clients/`) rather than a raw `fetch`. The ErrorBoundary + global handlers cover the first; routing data-fetching through the shared client covers the second.
+>
+> **Known gap.** The `templatecentral:add` service examples (`auth`, `feature`, `pagination`) and `standards (validation-patterns)` still show raw `fetch` with an explicit `APIError` throw — those services do reach `logError` via React Query's cache handlers and the global handlers, but they bypass the client's logging. `FetchClient` currently has no `credentials` or per-request-header hook, so cookie-session calls cannot move over as-is. Treat "one logged client" as the target state: new integrations extend `FetchClient` (see `templatecentral:add (integration)`); existing raw-`fetch` services migrate when `FetchClient` grows the missing options.
 
 > **Production upgrade path:** the homegrown console-JSON + batcher below is vendor-free and right for a scaffold default. For production error tracking, the community standard is **Sentry** (`@sentry/react`) — it auto-installs the ErrorBoundary wrapper + `window.onerror` + `unhandledrejection`, and adds source-map symbolication, breadcrumbs, release tracking, and PII scrubbing (`beforeSend`). Adopt it when you have a DSN; it supersedes the manual handlers above. OpenTelemetry's browser SDK is still experimental — not a client error-tracking replacement yet.
 
@@ -27,7 +29,42 @@ the marker.
 - Marker now present → proceed to Step 1.
 - Still absent (user chose to stop) → exit. Do not generate any files.
 
-### 1. Extend `src/lib/errors/error-log-handler.ts`
+> **Step order matters.** `error-log-handler.ts` imports from `@/lib/logging/breadcrumbs`, so the breadcrumb module (Step 1) must exist before the handler is extended (Step 2). Executing these out of order leaves a broken import and a failing `pnpm build`.
+
+### 1. Create `src/lib/logging/breadcrumbs.ts`
+
+An in-memory ring buffer (last 20 entries) attached to every error report. Labels are **scrubbed on the way in**, not on the way out — a breadcrumb is written once and read on every subsequent error report, so redacting at the entry point is the only place the guarantee holds:
+
+```ts
+// src/lib/logging/breadcrumbs.ts
+const MAX = 20;
+const buffer: Array<{ type: string; label: string; ts: string }> = [];
+
+// Navigation labels are URL paths, and paths routinely carry the exact values that
+// must never leave the browser: /reset-password/<one-time-token>, /users/<uuid>,
+// /invite/<code>. Collapse any segment that is not a plain word to a placeholder so
+// the route shape survives for debugging but the value does not.
+const SAFE_SEGMENT = /^[a-z][a-z0-9-]*$/i;
+
+export function redactLabel(label: string): string {
+  if (!label.startsWith('/')) return label;
+  return label
+    .split('/')
+    .map((segment) => (segment === '' || SAFE_SEGMENT.test(segment) ? segment : ':redacted'))
+    .join('/');
+}
+
+export function addBreadcrumb(crumb: { type: string; label: string }): void {
+  if (buffer.length >= MAX) buffer.shift();
+  buffer.push({ type: crumb.type, label: redactLabel(crumb.label), ts: new Date().toISOString() });
+}
+
+export function getBreadcrumbs(): typeof buffer {
+  return [...buffer];
+}
+```
+
+### 2. Extend `src/lib/errors/error-log-handler.ts`
 
 Add `logEvent` alongside the existing `logError`. Do not replace `logError` — only add:
 
@@ -44,47 +81,22 @@ export const logEvent = (name: string, data?: Record<string, unknown>): void => 
 };
 ```
 
-### 2. Create `src/lib/logging/breadcrumbs.ts`
-
-An in-memory ring buffer (last 20 entries) attached to every error report:
-
-```ts
-// src/lib/logging/breadcrumbs.ts
-const MAX = 20;
-const buffer: Array<{ type: string; label: string; ts: string }> = [];
-
-export function addBreadcrumb(crumb: { type: string; label: string }): void {
-  if (buffer.length >= MAX) buffer.shift();
-  buffer.push({ ...crumb, ts: new Date().toISOString() });
-}
-
-export function getBreadcrumbs(): typeof buffer {
-  return [...buffer];
-}
-```
-
-Update `src/lib/errors/error-log-handler.ts` to import and attach breadcrumbs to error logs:
-
-```ts
-import { getBreadcrumbs } from '@/lib/logging/breadcrumbs';
-// Inside logError, add breadcrumbs to the console.error object:
-//   breadcrumbs: getBreadcrumbs()
-// Example for the APIError branch:
-console.error(`${label}:`, {
-  message: error.message,
-  statusCode: error.statusCode,
-  data: error.data,
-  timestamp: new Date().toISOString(),
-  breadcrumbs: getBreadcrumbs(),
-});
-```
-
-Also import `addBreadcrumb` in `error-log-handler.ts` and call it from `logError`:
+Then attach breadcrumbs to error logs. `error.data` is the **raw, unfiltered response body** from the backend — it can contain the submitted payload, a session identifier, or an internal stack trace, and none of that should be shipped off-device. Keep it in the dev console only; send just `statusCode` + `message` onward:
 
 ```ts
 import { addBreadcrumb, getBreadcrumbs } from '@/lib/logging/breadcrumbs';
+
 // At the top of every logError branch (before console.error):
-addBreadcrumb({ type: 'error', label: label });
+addBreadcrumb({ type: 'error', label });
+
+// APIError branch — raw data stays behind the DEV guard, never in the shipped payload:
+console.error(`${label}:`, {
+  message: error.message,
+  statusCode: error.statusCode,
+  ...(import.meta.env.DEV ? { data: error.data } : {}),
+  timestamp: new Date().toISOString(),
+  breadcrumbs: getBreadcrumbs(),
+});
 ```
 
 ### 3. Create `src/lib/logging/log-batcher.ts`
@@ -166,12 +178,22 @@ if (typeof window !== 'undefined') {
 
 Wire `enqueueLog` into `logError` and `logEvent`:
 
+Only allowlisted fields cross this boundary — `enqueueLog` POSTs to a backend, so anything passed here leaves the browser. Pass `statusCode` and the error `message`; never `error.data`, never the caught error object itself:
+
 ```ts
 // src/lib/errors/error-log-handler.ts — add at the end of each branch
 import { enqueueLog } from '@/lib/logging/log-batcher';
-// In logError:
-enqueueLog({ level: 'error', label, message: ..., breadcrumbs: getBreadcrumbs() });
-// In logEvent:
+
+// In logError (APIError branch):
+enqueueLog({
+  level: 'error',
+  label,
+  message: error.message,
+  statusCode: error.statusCode,
+  breadcrumbs: getBreadcrumbs(),
+});
+
+// In logEvent — `data` is caller-supplied, so it is the caller's job to keep it PII-free:
 enqueueLog({ level: 'info', label: name, ...data });
 ```
 
@@ -179,11 +201,33 @@ enqueueLog({ level: 'info', label: name, ...data });
 
 Wire into React Router so every navigation is recorded before an error report:
 
-```ts
-// src/router.tsx — extend existing router
+`useLocation` must be called from a component rendered *inside* `<BrowserRouter>`. Add a small listener component and render it next to `<Routes>` in `src/router.tsx`:
+
+```tsx
+// src/components/layout/navigation-breadcrumbs.tsx
 import { addBreadcrumb } from '@/lib/logging/breadcrumbs';
-// In your router subscribe / useEffect that watches location:
-addBreadcrumb({ type: 'navigation', label: location.pathname });
+import { useEffect } from 'react';
+import { useLocation } from 'react-router';
+
+// addBreadcrumb() redacts non-word path segments, so ids and one-time tokens
+// in the pathname never reach the buffer.
+export function NavigationBreadcrumbs() {
+  const location = useLocation();
+
+  useEffect(() => {
+    addBreadcrumb({ type: 'navigation', label: location.pathname });
+  }, [location.pathname]);
+
+  return null;
+}
+```
+
+```tsx
+// src/router.tsx — render it inside <BrowserRouter>, alongside the existing <Routes>
+<BrowserRouter>
+  <NavigationBreadcrumbs />
+  <Routes>{/* existing routes unchanged */}</Routes>
+</BrowserRouter>
 ```
 
 ### 5. Export from `src/lib/logging/index.ts`
@@ -210,6 +254,20 @@ grep -rn "password\|secret\|token\|api_key\|email\|phone\|address\|credit_card" 
 ```
 
 Any match must be removed or redacted before the code ships.
+
+**The grep is necessary but not sufficient.** It scans source text for literal keywords; it cannot see what a value actually holds at runtime. The two payloads that carry PII in this design contain no such keyword anywhere in the source:
+
+| Runtime payload | Why grep misses it | Required control |
+|-----------------|--------------------|------------------|
+| `APIError.data` | An opaque `unknown` — the backend decides what is in it (echoed form fields, session ids, stack traces) | Never forward it to `enqueueLog`; keep it behind `import.meta.env.DEV` for the console only (Step 2) |
+| Breadcrumb labels | `location.pathname` is a plain string — `/reset-password/<token>` matches nothing | `redactLabel()` at `addBreadcrumb()` entry (Step 1) collapses non-word segments |
+
+Before shipping, confirm both by inspection, not by grep:
+
+1. Every `enqueueLog(...)` call site passes only allowlisted scalars (`level`, `label`, `message`, `statusCode`, `breadcrumbs`) — no spread of an error object, no `error.data`.
+2. Trigger an error on a route with a dynamic segment in dev and read the emitted JSON — the breadcrumb must show `/reset-password/:redacted`, not the real value.
+
+Anything new that reaches `enqueueLog` must be added to the allowlist deliberately, never by spreading an object of unknown shape.
 
 ## Validate
 

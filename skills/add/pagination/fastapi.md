@@ -29,6 +29,10 @@ the marker.
 from pydantic import BaseModel, Field
 
 class PaginationParams(BaseModel):
+    # extra='forbid' rejects unknown query params outright — only takes effect
+    # when the model is bound with Annotated[..., Query()] (see step 4).
+    model_config = {'extra': 'forbid'}
+
     page: int = Field(default=1, ge=1, le=10_000, description='Page number (1-indexed)')
     limit: int = Field(
         default=10,
@@ -53,9 +57,9 @@ from typing import Generic, TypeVar
 T = TypeVar('T')
 
 class PaginationMetadata(BaseModel):
-    page: int = Field(..., serialization_alias='page')
-    limit: int = Field(..., serialization_alias='limit')
-    total: int = Field(..., serialization_alias='total')
+    page: int
+    limit: int
+    total: int
     has_more: bool = Field(..., serialization_alias='hasMore')
 
 class PaginatedData(BaseModel, Generic[T]):
@@ -121,19 +125,25 @@ class PaginationService:
 
 Sync SQLAlchemy (scaffold default):
 
+> Bind the params model with `Annotated[PaginationParams, Query()]` — the documented form for
+> query-parameter models since FastAPI 0.115. Plain `Depends()` still works but ignores
+> `extra='forbid'`, so unknown query params pass through silently.
+
 ```python
-# src/api/projects/routes.py
-from fastapi import APIRouter, Depends
+# src/api/routers/projects.py
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
+from api.schemas.response.project import ProjectResponse
 from core.exceptions import InvalidInputError
-from database.session import get_db
 from core.pagination.pagination_service import PaginationService
 from core.types.pagination import PaginatedData, PaginatedResponse, PaginationMetadata
 from core.validation.schemas import PaginationParams
+from database.session import get_db
 from models.project import Project as ProjectModel
-from .schemas import ProjectResponse
 
 router = APIRouter(prefix='/projects', tags=['projects'])
 
@@ -141,7 +151,7 @@ ALLOWED_SORT_FIELDS = ['name', 'created_at', 'updated_at']
 
 @router.get('', response_model=PaginatedResponse[ProjectResponse])
 def list_projects(
-    params: PaginationParams = Depends(),
+    params: Annotated[PaginationParams, Query()],
     session: Session = Depends(get_db),
 ) -> PaginatedResponse[ProjectResponse]:
     sort_result = PaginationService.parse_sort_param(params.sort, ALLOWED_SORT_FIELDS)

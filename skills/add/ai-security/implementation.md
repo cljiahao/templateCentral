@@ -207,13 +207,13 @@ if (!parsed.success) throw new Error('Model returned invalid structure');
 
 ```python
 # Python equivalent using Pydantic
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl
 from typing import Annotated
 from annotated_types import Len
 
 class AnswerResponse(BaseModel):
     answer: Annotated[str, Len(max_length=2000)]
-    confidence: float
+    confidence: float = Field(ge=0, le=1)
     sources: list[HttpUrl]
 
 import json
@@ -409,7 +409,7 @@ Cloud providers publish responsible-AI checklists for evaluating production AI s
 
 No single framework covers everything — OWASP LLM Top 10 focuses on attack vectors; the Responsible AI Lens focuses on systemic trustworthiness. Run both checklists before shipping AI features to production.
 
-For Capability C (agentic systems), also apply the **OWASP Top 10 for Agentic Applications 2026 (ASI prefix codes)** — a separate framework covering multi-agent orchestration risks:
+For Capability C (agentic systems), also apply the **OWASP Top 10 for Agentic Applications (ASI prefix codes)** — a separate framework covering multi-agent orchestration risks:
 
 | Code | Name | Mitigation focus |
 |------|------|-----------------|
@@ -434,8 +434,8 @@ The overarching design principle is **Least Agency**: grant each agent only the 
 
 ## Changelog
 ### 1.2.0
-- Expanded OWASP Agentic Top 10 2026 to full ASI01–ASI10 table with mitigation focus per entry
+- Expanded OWASP Agentic Top 10 to full ASI01–ASI10 table with mitigation focus per entry
 ### 1.1.0
-- Added OWASP Top 10 for Agentic Applications (2026) reference for Capability C systems
+- Added OWASP Top 10 for Agentic Applications (ASI prefix codes) reference for Capability C systems
 ### 1.0.0
 - Initial release — OWASP LLM Top 10 v2.0 controls for A/B/C AI capability tiers

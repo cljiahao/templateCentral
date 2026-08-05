@@ -17,7 +17,7 @@ Write these files exactly as shown.
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.10.0",
+  "packageManager": "pnpm@11.18.0",
   "engines": {
     "node": ">=24"
   },
@@ -60,7 +60,7 @@ Write these files exactly as shown.
     "@types/react-dom": "^19.2.0",
     "@vitest/coverage-v8": "^4.1.8",
     "eslint": "^9.0.0",
-    "eslint-config-next": "^16.2.6",
+    "eslint-config-next": "^16.2.11",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-sonarjs": "4.1.0",
     "lefthook": "^2.1.9",
@@ -230,7 +230,7 @@ const nextConfig: NextConfig = {
           // HSTS — browsers ignore HSTS received over HTTP, so this is only effective over HTTPS.
           { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
           // CSP baseline — tighten after auth/analytics are wired. frame-ancestors replaces X-Frame-Options for CSP2+ browsers.
-          { key: 'Content-Security-Policy', value: "frame-ancestors 'none'; base-uri 'self'; object-src 'none'" },
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'" },
         ],
       },
     ];
@@ -245,7 +245,7 @@ export default nextConfig;
 ```json
 {
   "compilerOptions": {
-    "target": "ES2017",
+    "target": "ES2022",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,

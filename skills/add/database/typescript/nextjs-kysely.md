@@ -32,6 +32,9 @@ import type { Database } from './types';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  // TLS in transit is required for any non-local database. Verify the server
+  // certificate — `rejectUnauthorized: false` accepts a MITM proxy silently.
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : undefined,
   max: 10,
 });
 
@@ -45,6 +48,8 @@ if (process.env.NODE_ENV !== 'production') globalForKysely.db = db;
 ```
 
 > **Why the singleton**: Next.js hot-reloads modules in development. The `globalThis` cache prevents connection exhaustion.
+
+> **TLS**: the `ssl` option above is the enforcement point. If your managed provider expects TLS to be negotiated from the connection string instead, append `?sslmode=require` (or `?sslmode=verify-full`, which also checks the hostname) to `DATABASE_URL` — same requirement as the IAM variant's `ssl: { rejectUnauthorized: true }` below. Plaintext connections are acceptable only against a local database.
 
 ##### IAM Auth Variant
 
@@ -144,7 +149,9 @@ import { type Kysely, sql } from 'kysely';
 export async function up(db: Kysely<unknown>): Promise<void> {
   await db.schema
     .createTable('users')
-    .addColumn('id', 'text', (col) => col.primaryKey().defaultTo(sql`gen_random_uuid()`))
+    // gen_random_uuid() returns uuid; PostgreSQL has no assignment cast to text,
+    // so the cast is required for a text-typed primary key.
+    .addColumn('id', 'text', (col) => col.primaryKey().defaultTo(sql`gen_random_uuid()::text`))
     .addColumn('email', 'text', (col) => col.notNull().unique())
     .addColumn('name', 'text', (col) => col.notNull())
     .addColumn('created_at', 'timestamptz', (col) => col.notNull().defaultTo(sql`now()`))
@@ -192,7 +199,10 @@ async function migrate() {
   await db.destroy();
 }
 
-migrate();
+migrate().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
 ```
 
 Run migrations with: `pnpm migrate`

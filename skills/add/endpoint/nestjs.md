@@ -192,6 +192,39 @@ export class TaskController {
 }
 ```
 
+#### Authorization — decide before moving on
+
+The controller above is **fully public**: anyone who can reach the service can create,
+update, and delete records. That is almost never what a generated CRUD module should ship
+as, so treat authorization as a required decision, not an optional extra.
+
+- **If `src/modules/auth/` exists** (the project ran `templatecentral:add` (auth)), apply
+  the project's guard by default. Put `@UseGuards(JwtAuthGuard)` + `@ApiBearerAuth()` on
+  the controller class to cover every route, then remove the guard from individual read
+  routes only where public access is a deliberate product decision.
+
+  ```typescript
+  import { Controller, UseGuards } from '@nestjs/common';
+  import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+  import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+
+  @ApiTags('Tasks')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Controller('tasks')
+  export class TaskController {
+  ```
+
+  Without `@ApiBearerAuth()` the routes still work but Swagger renders them as
+  unauthenticated, so "try it out" fails with a confusing 401.
+
+- **If the project has no auth yet**, ask the user explicitly: *"POST/PUT/DELETE on
+  `/tasks` will be reachable without credentials — is unauthenticated write access
+  intended?"* If it is not, run `templatecentral:add` (auth) before shipping the module.
+- **Ownership is separate from authentication.** A guard only proves *someone* is logged
+  in. If a record belongs to a user, the service must also check that the caller owns the
+  row before updating or deleting it.
+
 ### 7. Create Module
 
 Create `src/modules/<name>/<name>.module.ts`:

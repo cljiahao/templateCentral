@@ -76,20 +76,27 @@ Data access services consumed by React Query hooks on the client side:
 import { APIError } from '@/integrations/error';
 import type { ProjectItem } from '../types';
 
+// Every service method maps a non-2xx response to APIError; the fallback message
+// applies only when the body is not valid JSON
+async function assertOk(res: Response, message: string): Promise<void> {
+  if (res.ok) return;
+  throw new APIError({
+    statusCode: res.status,
+    data: await res.json().catch(() => ({ message })),
+  });
+}
+
 export const ProjectService = {
   getAll: async (): Promise<ProjectItem[]> => {
     const res = await fetch('/api/projects');
-    if (!res.ok) {
-      throw new APIError({ statusCode: res.status, data: await res.json().catch(() => ({ message: 'Failed to fetch projects' })) });
-    }
+    await assertOk(res, 'Failed to fetch projects');
     return res.json();
   },
 
   getById: async (id: string): Promise<ProjectItem> => {
-    const res = await fetch(`/api/projects/${id}`);
-    if (!res.ok) {
-      throw new APIError({ statusCode: res.status, data: await res.json().catch(() => ({ message: 'Project not found' })) });
-    }
+    // Encode interpolated path segments — ids are frequently user-supplied
+    const res = await fetch(`/api/projects/${encodeURIComponent(id)}`);
+    await assertOk(res, 'Project not found');
     return res.json();
   },
 
@@ -99,9 +106,7 @@ export const ProjectService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) {
-      throw new APIError({ statusCode: res.status, data: await res.json().catch(() => ({ message: 'Failed to create project' })) });
-    }
+    await assertOk(res, 'Failed to create project');
     return res.json();
   },
 };

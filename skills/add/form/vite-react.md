@@ -88,14 +88,11 @@ export function ContactForm() {
     },
   });
 
-  const onSubmit = async (values: ContactFormValues) => {
-    try {
-      throw new Error(
-        `TODO: wire up your submit handler (mutation hook / API call) with payload: ${JSON.stringify(values)}`,
-      );
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Submission failed.');
-    }
+  const onSubmit = async (_values: ContactFormValues) => {
+    // TODO: replace with the feature's mutation hook / API call.
+    // Never serialize `values` into a toast or an Error message — form payloads
+    // routinely carry passwords and tokens, and both surfaces are user-visible.
+    toast.success('TODO: wire up submit handler');
   };
 
   return (
