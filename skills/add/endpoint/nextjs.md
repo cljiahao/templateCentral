@@ -34,7 +34,8 @@ API routes live in `src/app/api/`:
 
 ```
 src/app/api/
-├── route.ts                        # GET /api (health check)
+├── health/
+│   └── route.ts                    # GET /api/health (health check)
 ├── <resource>/
 │   ├── route.ts                    # GET, POST /api/<resource>
 │   └── [id]/
@@ -68,7 +69,7 @@ const CreateProjectSchema = z.object({
 export const GET = withLogging(async () => {
   try {
     // ← Replace: e.g. await db.select().from(projects)
-    const rows = [];
+    const rows: unknown[] = [];
     return NextResponse.json(rows);
   } catch (error) {
     return handleApiError('Failed to fetch projects', error);
@@ -108,8 +109,8 @@ import { NextResponse } from 'next/server';
 
 export const GET = withLogging<RouteContext<{ id: string }>>(async (_request, { params }) => {
   try {
-    const { id } = await params;
-    // ← Replace: e.g. await db.select().from(projects).where(eq(projects.id, id)).then(r => r[0] ?? null)
+    const { id: _id } = await params;
+    // ← Replace: e.g. await db.select().from(projects).where(eq(projects.id, _id)).then(r => r[0] ?? null)
     const project = null;
     if (!project) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });

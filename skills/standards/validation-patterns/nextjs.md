@@ -55,8 +55,11 @@ export function LoginForm() {
       });
 
       if (!response.ok) {
-        const body = await response.json();
-        setError(body.error || 'Login failed');
+        // The backend's error text is for engineers, not users — it can carry stack
+        // traces, SQL fragments, or internal identifiers. Log it, show a fixed string.
+        const body = await response.json().catch(() => ({}));
+        console.error('Login failed', body.error ?? response.status);
+        setError('Login failed. Check your credentials and try again.');
         return;
       }
 
@@ -77,11 +80,15 @@ export function LoginForm() {
           id="email"
           type="email"
           placeholder="user@example.com"
+          aria-invalid={Boolean(errors.email)}
+          aria-describedby={errors.email ? 'email-error' : undefined}
           {...register('email')}
           className="w-full rounded border px-3 py-2"
         />
         {errors.email && (
-          <p className="text-sm text-destructive">{errors.email.message}</p>
+          <p id="email-error" role="alert" className="text-sm text-destructive">
+            {errors.email.message}
+          </p>
         )}
       </div>
 
@@ -90,15 +97,23 @@ export function LoginForm() {
         <input
           id="password"
           type="password"
+          aria-invalid={Boolean(errors.password)}
+          aria-describedby={errors.password ? 'password-error' : undefined}
           {...register('password')}
           className="w-full rounded border px-3 py-2"
         />
         {errors.password && (
-          <p className="text-sm text-destructive">{errors.password.message}</p>
+          <p id="password-error" role="alert" className="text-sm text-destructive">
+            {errors.password.message}
+          </p>
         )}
       </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       <button
         type="submit"
@@ -184,18 +199,22 @@ import { handleApiError } from '@/lib/errors';
 import { withLogging } from '@/lib/utils/with-logging';
 import { NextResponse } from 'next/server';
 
-// A hard ceiling on `limit` is what stops a client from asking for the whole table
+// A hard ceiling on `limit` is what stops a client from asking for the whole table.
+// Simplified for illustration — the canonical schema (with per-rule error messages and
+// a sort-format regex) lives in `src/lib/validation/schemas.ts` via
+// `templatecentral:add (pagination)`. Keep the bounds and defaults identical.
 const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
   sort: z.string().optional(),
 });
 
 export const GET = withLogging(async (request) => {
   try {
     const { searchParams } = new URL(request.url);
-    // searchParams.get() returns null for missing params, but z.string().default()
-    // only fires on undefined — coalesce to undefined so defaults apply.
+    // searchParams.get() returns null for missing params. `.default()` only fires on
+    // undefined, and z.coerce.number() would turn that null into 0 and fail min(1) —
+    // coalesce to undefined so the defaults apply.
     const queryObj = {
       page: searchParams.get('page') ?? undefined,
       limit: searchParams.get('limit') ?? undefined,
@@ -209,7 +228,7 @@ export const GET = withLogging(async (request) => {
     }
 
     // Use parsed.data.page, parsed.data.limit, parsed.data.sort
-    const projects = [];
+    const projects: unknown[] = [];
 
     return NextResponse.json({ data: projects });
   } catch (error) {
@@ -310,10 +329,13 @@ export const POST = withLogging(async (request) => {
 
 **7. External API Response Validation**
 
+The validation shape below is what matters here. For the full integration layer — client, service, factory, and env wiring — use `templatecentral:add (integration)`, which owns `src/integrations/services/github-service.ts`.
+
 ```ts
-// src/integrations/services/github-service.ts
+// src/integrations/services/github-user.ts
 import { z } from 'zod';
 import { APIError } from '@/integrations/error';
+import { logError } from '@/lib/errors';
 
 const externalApiUserSchema = z.object({
   id: z.number(),
@@ -330,22 +352,36 @@ export async function fetchGithubUser(username: string) {
     throw new APIError({ statusCode: response.status, data: { message: 'GitHub API error' } });
   }
 
-  const data = await response.json();
+  const data: unknown = await response.json();
 
-  // Validate response matches schema
   const parsed = externalApiUserSchema.safeParse(data);
 
   if (!parsed.success) {
+    // Field errors are a debugging aid, not a user-facing message — log them, and
+    // throw the generic APIError the rest of the app already knows how to render.
+    logError(
+      'fetchGithubUser: response failed schema validation',
+      new Error(JSON.stringify(z.flattenError(parsed.error).fieldErrors))
+    );
     throw new APIError({ statusCode: 502, data: { message: 'Invalid GitHub API response' } });
   }
 
-  // Safe to use: parsed.data has required fields
   return {
     id: parsed.data.id,
     email: parsed.data.email,
   };
 }
 ```
+
+## Rules
+
+- Schemas live in `schemas/` — NEVER define or export a schema from a component file
+- Always re-validate on the server; the client-side resolver is UX only and a crafted request skips it entirely
+- Always validate route params / query values with Zod before use, and `encodeURIComponent` any value interpolated into a path
+- Route failures go through `handleApiError` — NEVER hand-roll the error body, or the error contract drifts per route
+- Throw `APIError`, never a generic `Error` — and never embed validation field detail in the thrown message
+- NEVER render a backend error string to the user — log it, show a fixed generic message
+- Every input needs `aria-invalid` and an `aria-describedby` pointing at its `role="alert"` error node
 
 ## Testing / Verification
 
@@ -361,6 +397,13 @@ curl -X POST http://localhost:3000/api/projects \
 
 pnpm test
 ```
+
+## See Also
+
+- `templatecentral:add` (error-handling) — Transform validation errors to consistent response format
+- `templatecentral:add` (logging) — Log validation failures with context
+- Stack-specific `code-standards` — Type annotation and schema standards
+- `templatecentral:add (endpoint)` / `templatecentral:add (form)` — Use validation patterns in new routes/forms
 
 ## After Writing Code
 
