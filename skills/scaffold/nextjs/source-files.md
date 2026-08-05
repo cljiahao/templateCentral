@@ -985,6 +985,41 @@ export default function RootLayout({
 }
 ```
 
+### `src/app/error.tsx`
+
+Root-level error boundary — catches any render-phase error not caught by a more specific route-segment `error.tsx` (see `templatecentral:add (page)` Step 4 for adding one scoped to a specific route).
+
+```tsx
+'use client';
+
+import { useEffect } from 'react';
+
+import { Button } from '@/components/ui/button';
+import { logError } from '@/lib/errors/error-log-handler';
+
+export default function GlobalError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  useEffect(() => {
+    logError('app.error-boundary', error);
+  }, [error]);
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4">
+      <h2 className="text-lg font-semibold">Something went wrong</h2>
+      {error.digest && (
+        <p className="text-muted-foreground text-sm">Reference: {error.digest}</p>
+      )}
+      <Button onClick={reset}>Try again</Button>
+    </div>
+  );
+}
+```
+
 ### `src/app/api/health/route.ts`
 
 > The single health endpoint. `/api/health` is the path the Dockerfile `HEALTHCHECK` probes and the

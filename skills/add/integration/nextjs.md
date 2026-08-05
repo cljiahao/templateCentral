@@ -56,24 +56,25 @@ export type GithubRepo = z.infer<typeof githubRepoSchema>;
 
 Extend the base `FetchClient` (at `src/integrations/clients/base/fetch-client.ts`) which handles response parsing, error mapping, and content-type negotiation:
 
+The client returns `unknown`, not the schema type. Nothing has been validated at this layer — a `request<GithubRepo[]>` annotation would be a type assertion over untrusted network data, and any caller reaching for the client directly would get a compile-time guarantee the runtime does not back. `unknown` makes the trust boundary explicit: the value is unusable until the service `safeParse()`s it below.
+
 ```ts
 // src/integrations/clients/github-client.ts
 import { FetchClient } from './base/fetch-client';
-import type { GithubRepo } from '../schemas/github-schemas';
 
 export class GithubClient extends FetchClient {
   constructor(baseUrl: string, token: string) {
     super(baseUrl, { Authorization: `Bearer ${token}` });
   }
 
-  async getRepos() {
-    return this.request<GithubRepo[]>('user/repos');
+  async getRepos(): Promise<unknown> {
+    return this.request<unknown>('user/repos');
   }
 
-  async getRepo(owner: string, repo: string) {
+  async getRepo(owner: string, repo: string): Promise<unknown> {
     // FetchClient.request concatenates the path onto the base URL — encode every
     // interpolated segment so a value like `../../` cannot traverse off the intended path
-    return this.request<GithubRepo>(
+    return this.request<unknown>(
       `repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
     );
   }
