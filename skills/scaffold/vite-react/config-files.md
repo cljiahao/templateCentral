@@ -94,6 +94,11 @@ lefthook.yml
 .github/
 .gitleaks.toml
 
+# shadcn CLI output — the registry emits double-quoted, semicolon-less code that
+# conflicts with this project's singleQuote/semi settings. `pnpm exec prettier
+# --check` would fail on every `shadcn add`, forever, if this weren't ignored.
+src/components/ui/
+
 # Governance markdown — human-approved (protect-files.sh gates AGENTS.md) and
 # alignment-sensitive. Prettier reflows headings and collapses the padded
 # file-layout tables, silently drifting them from the approved content.
@@ -362,7 +367,7 @@ blockExoticSubdeps: true
 # Explicitly allowlist packages permitted to run install-time build scripts.
 # pnpm 11 blocks all install scripts by default; add native packages here as needed.
 allowBuilds:
-  lefthook: false      # git-hook installer; binary ships via optional deps — no build needed, but pnpm 11 still requires an explicit decision or it blocks `pnpm <script>` runs
+  lefthook: false # git-hook installer; binary ships via optional deps — no build needed, but pnpm 11 still requires an explicit decision or it blocks `pnpm <script>` runs
 # Add native build deps here if `pnpm install` reports ERR_PNPM_IGNORED_BUILDS, e.g.:
 #   esbuild: true
 #   sharp: true
@@ -485,10 +490,10 @@ Update the `<title>` to the project name during scaffolding.
 
 ```ts
 /// <reference types="vitest/config" />
-import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { defineConfig } from 'vite';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

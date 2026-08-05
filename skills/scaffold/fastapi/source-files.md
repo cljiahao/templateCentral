@@ -1115,7 +1115,7 @@ In `src/core/config.py`, update the `CommonSettings` defaults:
 cp src/.env.default src/.env
 ```
 
-Update values as needed (project name, port, etc.). Never commit `src/.env`.
+`CommonSettings`/`APISettings` load `src/.env` directly (`SettingsConfigDict(env_file="src/.env")`), which takes priority over the class defaults edited in Step 2 — update `PROJECT_NAME`/`PROJECT_VERSION`/`PROJECT_DESCRIPTION` in `src/.env` to match Step 2's values now, or Step 2's edits are silently overridden at runtime. Never commit `src/.env`.
 
 ### 4. Set up virtual environment and install dependencies
 
