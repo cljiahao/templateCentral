@@ -79,9 +79,18 @@ def db_client() -> Generator[TestClient, None, None]:
     from database.session import get_db
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
     from database.base import Base
 
-    engine = create_engine("sqlite:///:memory:")
+    # StaticPool + check_same_thread=False are mandatory here: SQLite's
+    # in-memory database lives inside a single connection, and TestClient
+    # runs the app in a different thread. The default pool hands that thread
+    # a fresh, empty database and every test fails with "no such table".
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     Base.metadata.create_all(engine)
     TestSession = sessionmaker(bind=engine)
     session = TestSession()

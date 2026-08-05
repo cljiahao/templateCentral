@@ -52,7 +52,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { z } from 'zod';
 import { ProjectsService } from './projects.service';
@@ -93,6 +93,15 @@ export class ProjectsController {
 
   @Post('upload')
   @ApiOperation({ summary: 'Upload a file' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    required: true,
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
   async uploadFile(@Req() req: FastifyRequest) {
     if (!req.isMultipart()) {
       throw new BadRequestException('File is required');
@@ -114,8 +123,21 @@ export class ProjectsController {
     // no manual size check needed.
     const buffer = await data.toBuffer();
 
-    // Safe to use: buffer, data.filename
-    return { message: 'File uploaded' };
+    // data.filename is attacker-controlled: it can contain `../`, absolute paths, or
+    // NUL bytes, so it must NEVER become part of a storage path. The storage key is
+    // generated server-side; the client-supplied name is sanitized display metadata only.
+    const storageKey = crypto.randomUUID();
+    const displayName = data.filename
+      .replace(/[^\w.\- ]/g, '_')
+      .slice(0, 255);
+
+    // Safe to use: buffer, storageKey. Never: data.filename in a path.
+    return {
+      message: 'File uploaded',
+      storageKey,
+      displayName,
+      size: buffer.byteLength,
+    };
   }
 }
 ```

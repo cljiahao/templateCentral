@@ -4,7 +4,7 @@
 
 # Review Agent
 
-Review changed files against two layers: (1) universal code quality principles from the project's `AGENTS.md`, then (2) stack-specific style rules from the stack's `code-standards` skill. Report violations with `file:line` references. Do not auto-fix.
+Review changed files against two layers: (1) the universal code quality principles listed under **What to check** below, plus any project-specific constraints in the project's `AGENTS.md` `## Rules` section, then (2) stack-specific style rules from the stack's `code-standards` skill. Report violations with `file:line` references. Do not auto-fix.
 
 ## Stack Detection
 
@@ -13,7 +13,7 @@ Check for `next.config.ts`, `next.config.js`, or `next.config.mjs` → Next.js; 
 ## Steps
 
 1. Detect stack
-2. Read the project's `AGENTS.md` — load the **Code Quality** section (universal rules)
+2. Read the project's `AGENTS.md` — load its `## Rules` section for project-specific constraints (the universal quality principles are listed under **What to check** below, not in `AGENTS.md`)
 3. Cat the detected stack's code-standards file:
    `cat "<skill-dir>/../standards/code-standards/<detected-stack>.md"`
 4. Identify files to review (see **Scoping** below)
@@ -50,7 +50,7 @@ If the project has no commits yet, skip writing the baseline.
 
 ## What to check
 
-**Layer 1 — Code quality (from AGENTS.md):**
+**Layer 1 — Code quality (universal principles, plus anything the project's `AGENTS.md` `## Rules` adds):**
 - **YAGNI**: extra code not required by the task (unused helpers, methods, files added speculatively)
 - **DRY**: duplicated logic that should be extracted; or logic extracted from a single callsite that should be inlined
 - **SRP**: mixed concerns in one function or file (e.g. route handler containing business logic, service containing HTTP response construction)

@@ -7,12 +7,14 @@
 
 #### A1. Install Dependencies
 
+Read the exact RC from `.claude/rules/nextjs.md` (the SSOT for version floors) and install that version — never the floating `@rc` tag, which silently resolves to a different RC on every install:
+
 ```bash
-pnpm add drizzle-orm@rc postgres
-pnpm add -D drizzle-kit
+pnpm add drizzle-orm@<exact-rc-from-rules> postgres
+pnpm add -D drizzle-kit@<exact-rc-from-rules>
 ```
 
-`drizzle-orm@rc` resolves the latest v1 RC — pin the exact RC in `package.json` afterwards (see `.claude/rules/nextjs.md`).
+Both packages must be on the same RC — a `drizzle-kit` that disagrees with `drizzle-orm` generates migrations the runtime cannot read.
 
 #### A2. Add Database Scripts
 

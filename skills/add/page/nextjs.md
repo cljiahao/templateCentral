@@ -38,7 +38,7 @@ the marker.
 
 > **Dashboard pages require auth.** If `src/app/dashboard/` does not exist yet, run the `templatecentral:add` (auth) skill first — it creates the dashboard route group along with the full auth stack.
 
-> Dashboard pages are automatically protected by `src/proxy.ts` once auth is configured — any route not in `PUBLIC_PATHS` requires authentication. No manual auth checks needed in page components.
+> `proxy.ts` only gates routing on cookie presence — it is NOT the authoritative check. Every protected route group must additionally `await auth.api.getSession({ headers: await headers() })` in its `layout.tsx` and `redirect()` when null — see `templatecentral:add (auth)` Step 8.
 
 > For API endpoints, use `templatecentral:add (endpoint)`.
 
@@ -91,15 +91,26 @@ The `error` prop contains the thrown error (with an optional `digest` for server
 // src/app/dashboard/analytics/error.tsx
 'use client';
 
+import { useEffect } from 'react';
+
 import { Button } from '@/components/ui/button';
 
 export default function AnalyticsError({ error, reset }: {
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  useEffect(() => {
+    console.error(error);
+  }, [error]);
+
   return (
     <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
       <h2 className="text-lg font-semibold">Something went wrong</h2>
+      {/* digest is the only handle on the server-side stack trace, which Next.js
+          strips from production error objects — surface it so users can report it */}
+      {error.digest && (
+        <p className="text-muted-foreground text-sm">Reference: {error.digest}</p>
+      )}
       <Button onClick={reset}>Try again</Button>
     </div>
   );

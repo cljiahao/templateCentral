@@ -25,6 +25,12 @@ Remove `db:generate`, `db:migrate`, `db:push`, `db:studio`. Add:
 
 ### Step 3 — Delete Drizzle files
 
+> **STOP — confirm with the user before running any of these deletions.** `drizzle/` holds the applied-migration journal and generated SQL; deleting it is irreversible and destroys the record of what has already run against every environment's database. Do not proceed until:
+> 1. The working tree is committed (or `drizzle/` is archived outside the repo), so the migration history is recoverable from git.
+> 2. The user has explicitly confirmed these paths should be removed.
+>
+> If the user declines or is unsure, leave the files in place — Kysely migrations live in a different directory and coexist with them fine.
+
 ```bash
 rm src/integrations/database/db-client.ts
 rm src/integrations/database/schema.ts
@@ -92,10 +98,23 @@ async function migrate() {
   });
 
   const { results, error } = await migrator.migrateToLatest();
-  // result-handling block: see drizzle-to-kysely.md Step 7
+  results?.forEach((r) => {
+    if (r.status === 'Success') console.log(`Migration "${r.migrationName}" executed successfully`);
+    else if (r.status === 'Error') console.error(`Migration "${r.migrationName}" failed`);
+  });
+
+  if (error) {
+    console.error('Migration failed:', error);
+    process.exit(1);
+  }
+
+  await db.destroy();
 }
 
-migrate();
+migrate().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
 ```
 
 ### Step 7 — Update `src/integrations/database/index.ts`

@@ -2,7 +2,7 @@
 **One prompt. Four stacks. Production-ready every time.**
 
 [![GitHub Stars](https://img.shields.io/github/stars/cljiahao/templatecentral?style=flat-square&logo=github)](https://github.com/cljiahao/templatecentral/stargazers)
-[![Version](https://img.shields.io/badge/version-5.13.0-blue?style=flat-square)](https://github.com/cljiahao/templatecentral)
+[![Version](https://img.shields.io/badge/version-5.14.0-blue?style=flat-square)](https://github.com/cljiahao/templatecentral)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-blueviolet?style=flat-square)](https://github.com/cljiahao/templatecentral)
 
 <!-- DEMO: Replace this comment block with a GIF once you have a recording.
@@ -225,8 +225,8 @@ templatecentral/
 │   ├── review/              # (de-registered utility) code review + apply feedback
 │   └── cleanup/             # (de-registered utility) remove example code / task scaffolding
 ├── .claude/skills/          # Repo-internal contributor skills (NOT shipped to installs)
-│   ├── audit/               # /tc-audit — full ecosystem + accuracy audit
-│   └── write-skill/         # /tc-write-skill — skill authoring checklist
+│   ├── tc-audit/            # /tc-audit — full ecosystem + accuracy audit
+│   └── tc-write-skill/      # /tc-write-skill — skill authoring checklist
 ├── AGENTS.md                # Agent orchestration guide
 └── CHANGELOG.md             # Full version history
 ```

@@ -59,63 +59,45 @@ export interface PaginatedResponse<T> {
 }
 ```
 
-**3. Pagination Service (Business Logic)**
+**3. Pagination Helpers (Business Logic)**
 
 ```ts
 // src/lib/pagination/pagination-service.ts
 import { PaginationMetadata } from '@/lib/types/pagination';
 
-export class PaginationService {
-  /**
-   * Calculate offset from page number
-   * @param page - Page number (1-indexed)
-   * @param limit - Items per page
-   * @returns Offset (0-indexed)
-   */
-  static calculateOffset(page: number, limit: number): number {
-    return (page - 1) * limit;
+// Pages are 1-indexed in the API surface, 0-indexed at the query layer
+export function calculateOffset(page: number, limit: number): number {
+  return (page - 1) * limit;
+}
+
+export function createMetadata(page: number, limit: number, total: number): PaginationMetadata {
+  return {
+    page,
+    limit,
+    total,
+    hasMore: page * limit < total,
+  };
+}
+
+// Returns null for any sort string that is malformed or names a field outside
+// allowedFields — the whitelist is what keeps the value out of the ORM's orderBy.
+// Callers map the returned field/direction to their own ORM column.
+export function parseSortParam(
+  sort: string | undefined,
+  allowedFields: string[]
+): { field: string; direction: 'asc' | 'desc' } | null {
+  if (!sort) return null;
+
+  // Split on the FIRST underscore only — field names may be snake_case (e.g. desc_created_at)
+  const separatorIndex = sort.indexOf('_');
+  if (separatorIndex === -1) return null;
+  const direction = sort.slice(0, separatorIndex);
+  const field = sort.slice(separatorIndex + 1);
+  if (!allowedFields.includes(field) || !['asc', 'desc'].includes(direction)) {
+    return null;
   }
 
-  /**
-   * Create pagination metadata for response
-   * @param page - Current page
-   * @param limit - Items per page
-   * @param total - Total item count
-   * @returns Pagination metadata
-   */
-  static createMetadata(page: number, limit: number, total: number): PaginationMetadata {
-    return {
-      page,
-      limit,
-      total,
-      hasMore: page * limit < total,
-    };
-  }
-
-  /**
-   * Parse sort parameter into a field/direction pair.
-   * @param sort - Sort string: "asc_name" or "desc_createdAt"
-   * @param allowedFields - Whitelist of allowed field names
-   * @returns { field, direction } or null if invalid — caller maps to ORM-specific orderBy
-   */
-  static parseSortParam(
-    sort: string | undefined,
-    allowedFields: string[]
-  ): { field: string; direction: 'asc' | 'desc' } | null {
-    if (!sort) return null;
-
-    // Split on the FIRST underscore only — field names may be snake_case (e.g. desc_created_at)
-    const separatorIndex = sort.indexOf('_');
-    if (separatorIndex === -1) return null;
-    const direction = sort.slice(0, separatorIndex);
-    const field = sort.slice(separatorIndex + 1);
-    if (!allowedFields.includes(field) || !['asc', 'desc'].includes(direction)) {
-      // Invalid sort - caller should reject
-      return null;
-    }
-
-    return { field, direction: direction as 'asc' | 'desc' };
-  }
+  return { field, direction: direction as 'asc' | 'desc' };
 }
 ```
 
@@ -126,7 +108,7 @@ export class PaginationService {
 import { handleApiError } from '@/lib/errors';
 import { withLogging } from '@/lib/utils/with-logging';
 import { paginationSchema } from '@/lib/validation/schemas';
-import { PaginationService } from '@/lib/pagination/pagination-service';
+import { calculateOffset, createMetadata, parseSortParam } from '@/lib/pagination/pagination-service';
 import { NextResponse } from 'next/server';
 import { asc, count, desc } from 'drizzle-orm';
 import { db, projects } from '@/integrations/database';
@@ -159,7 +141,7 @@ export const GET = withLogging(async (request) => {
 
     const { page, limit, sort } = parsed.data;
 
-    const sortParam = PaginationService.parseSortParam(sort, [...ALLOWED_SORT_FIELDS]);
+    const sortParam = parseSortParam(sort, [...ALLOWED_SORT_FIELDS]);
     if (sort && !sortParam) {
       return NextResponse.json(
         {
@@ -176,7 +158,7 @@ export const GET = withLogging(async (request) => {
         : desc(SORT_COLUMNS[sortParam.field as SortField])
       : desc(projects.createdAt);
 
-    const offset = PaginationService.calculateOffset(page, limit);
+    const offset = calculateOffset(page, limit);
     const [rows, [{ total }]] = await Promise.all([
       db
         .select({ id: projects.id, name: projects.name, description: projects.description })
@@ -190,7 +172,7 @@ export const GET = withLogging(async (request) => {
     return NextResponse.json({
       data: {
         items: rows,
-        pagination: PaginationService.createMetadata(page, limit, Number(total)),
+        pagination: createMetadata(page, limit, Number(total)),
       },
     });
   } catch (error) {
@@ -206,92 +188,118 @@ export const GET = withLogging(async (request) => {
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { z } from 'zod';
 import { Button } from '@/components/ui/button';
+import { APIError } from '@/integrations/error';
 
-interface Project {
-  id: string;
-  name: string;
-  description: string | null;
-}
+const PAGE_SIZE = 10;
 
-interface PaginatedResponse {
-  items: Project[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    hasMore: boolean;
-  };
+const projectItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+});
+
+type ProjectItem = z.infer<typeof projectItemSchema>;
+
+// Mirrors the envelope the route above returns: { data: { items, pagination } }
+const paginatedProjectsSchema = z.object({
+  data: z.object({
+    items: z.array(projectItemSchema),
+    pagination: z.object({
+      page: z.number(),
+      limit: z.number(),
+      total: z.number(),
+      hasMore: z.boolean(),
+    }),
+  }),
+});
+
+async function fetchProjects(page: number, limit: number) {
+  const response = await fetch(`/api/projects?page=${page}&limit=${limit}&sort=asc_name`);
+
+  if (!response.ok) {
+    throw new APIError({
+      statusCode: response.status,
+      data: await response.json().catch(() => ({ message: 'Failed to fetch projects' })),
+    });
+  }
+
+  const json: unknown = await response.json();
+
+  const parsed = paginatedProjectsSchema.safeParse(json);
+  if (!parsed.success) {
+    throw new APIError({
+      statusCode: 502,
+      data: { message: 'Received an unexpected response from the server.' },
+    });
+  }
+
+  return parsed.data.data;
 }
 
 export function ProjectsList() {
   const [page, setPage] = useState(1);
-  const limit = 10;
 
-  const { data, isPending, error } = useQuery({
+  const { data, isPending, isFetching, error } = useQuery({
     queryKey: ['projects', page],
-    queryFn: async () => {
-      const response = await fetch(
-        `/api/projects?page=${page}&limit=${limit}&sort=asc_name`
-      );
-      if (!response.ok) throw new Error('Failed to fetch projects');
-      const json: unknown = await response.json();
-      if (
-        typeof json !== 'object' ||
-        json === null ||
-        !('data' in json) ||
-        typeof (json as { data: unknown }).data !== 'object'
-      ) {
-        throw new Error('Malformed pagination response');
-      }
-      return (json as { data: PaginatedResponse }).data;
-    },
+    queryFn: () => fetchProjects(page, PAGE_SIZE),
+    // The page number is part of the queryKey, so every Next/Previous click is a
+    // cache miss. Without this, isPending flips true and the whole list unmounts
+    // and re-mounts on each click. keepPreviousData holds the previous page's rows
+    // on screen (with isFetching true) until the new page resolves.
+    placeholderData: keepPreviousData,
   });
 
+  // isPending is true only for the very first load — with keepPreviousData a page
+  // change keeps the previous rows mounted and surfaces as isFetching instead.
   if (isPending) return <div>Loading...</div>;
-  if (error) return <div>Error loading projects</div>;
+  if (error) return <div role="alert">Failed to load projects.</div>;
 
   const { items: projects, pagination } = data;
 
   return (
     <div className="space-y-4">
-      <ul className="space-y-2">
-        {projects.map((project: Project) => (
-          <li key={project.id} className="border p-2 rounded">
+      <ul className={isFetching ? 'space-y-2 opacity-60 transition-opacity' : 'space-y-2'}>
+        {projects.map((project: ProjectItem) => (
+          <li key={project.id} className="rounded border p-2">
             <h3 className="font-bold">{project.name}</h3>
-            {project.description && <p className="text-sm text-muted-foreground">{project.description}</p>}
+            {project.description && (
+              <p className="text-muted-foreground text-sm">{project.description}</p>
+            )}
           </li>
         ))}
       </ul>
 
-      {/* Pagination controls */}
-      <div className="flex gap-2 items-center justify-between">
-        <Button
-          variant="outline"
-          disabled={page === 1}
-          onClick={() => setPage(page - 1)}
-        >
-          Previous
-        </Button>
+      <nav aria-label="Pagination" className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <Button
+            variant="outline"
+            disabled={page === 1 || isFetching}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            Previous
+          </Button>
 
-        <span>
-          Page {pagination.page} of {Math.ceil(pagination.total / pagination.limit)}
-        </span>
+          <span>
+            Page {pagination.page} of {Math.ceil(pagination.total / pagination.limit)}
+          </span>
 
-        <Button
-          variant="outline"
-          disabled={!pagination.hasMore}
-          onClick={() => setPage(page + 1)}
-        >
-          Next
-        </Button>
-      </div>
+          <Button
+            variant="outline"
+            disabled={!pagination.hasMore || isFetching}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+          </Button>
+        </div>
 
-      <div className="text-sm text-muted-foreground">
-        Showing {(page - 1) * limit + 1} to {Math.min(page * limit, pagination.total)} of{' '}
-        {pagination.total} results
-      </div>
+        <div aria-live="polite" className="text-muted-foreground text-sm">
+          Showing {(page - 1) * pagination.limit + 1} to{' '}
+          {Math.min(page * pagination.limit, pagination.total)} of {pagination.total} results
+        </div>
+      </nav>
     </div>
   );
 }
@@ -326,6 +334,22 @@ curl 'http://localhost:3000/api/projects?page=1&limit=10&sort=asc_invalid'
 pnpm test
 pnpm build
 ```
+
+## Rules
+
+- Always set `placeholderData: keepPreviousData` on a paginated query — without it every page click blanks the list
+- Drive loading/disabled UI off `isFetching` for page changes; `isPending` covers only the first load
+- Validate the response with Zod `safeParse` and derive the row type from the schema — never hand-roll a type guard or re-declare the row shape alongside it
+- Always throw `APIError` (imported from `@/integrations/error`, not `@/lib/errors` — that barrel pulls server-only modules into the client bundle), never a generic `Error`
+- Whitelist every sortable field before it reaches the ORM's `orderBy` — `parseSortParam` returns `null` for anything outside the list
+- Use the shadcn `Button` for pagination controls — never a raw `<button>`
+
+## See Also
+
+- `templatecentral:add` (error-handling) — Pagination errors use unified error response schema
+- `templatecentral:standards` (validation-patterns) — Pagination query params validated with Zod
+- `templatecentral:add (endpoint)` — Add pagination to new list endpoints
+- Stack-specific `code-standards` — Database indexing best practices for sort fields
 
 ## After Writing Code
 

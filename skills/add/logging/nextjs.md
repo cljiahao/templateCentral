@@ -64,7 +64,13 @@ import { toNextJsHandler } from 'better-auth/next-js';
 
 const { GET: _GET, POST: _POST } = toNextJsHandler(auth);
 
-export const GET = withLogging(async (req) => _GET(req));
+// better-auth's handlers return a plain Response; withLogging is typed to return
+// NextResponse, so both branches re-wrap the response while preserving its
+// status and headers verbatim.
+export const GET = withLogging(async (req) => {
+  const response = await _GET(req);
+  return new NextResponse(response.body, response);
+});
 
 export const POST = withLogging(async (req) => {
   const url = new URL(req.url);
@@ -83,8 +89,8 @@ export const POST = withLogging(async (req) => {
     logger.info({ event: 'auth.logout' }, 'Logout');
   }
 
-  // Re-wrap as NextResponse (withLogging's return type) while preserving
-  // better-auth's status/headers verbatim — it sets Set-Cookie on sign-in/out.
+  // better-auth sets Set-Cookie on sign-in/out — passing `response` as the init
+  // object carries its status and headers through unchanged.
   return new NextResponse(response.body, response);
 });
 ```
@@ -225,9 +231,15 @@ curl http://localhost:3000/api/health
 # Trigger a slow DB query (or lower threshold temporarily to 0 for testing)
 # Expect: { name: "...", duration_ms: <n> } warn log
 
-# Confirm no prohibited fields
-grep -i "password\|secret\|token\|api_key\|email\|phone\|address\|credit_card" <log-output>
+# Confirm no prohibited field reaches the log unredacted.
+# The negative lookahead skips pino's own "[Redacted]" markers, so any line that
+# matches is a real leak. Lookahead needs PCRE (grep -P), not -E.
+pnpm dev 2>&1 | grep -P '"(password|secret|token|api_key|email|phone|address|credit_card)":\s*"(?!\[Redacted\])'
 ```
+
+Expect zero matches. On macOS, BSD `grep` has no `-P` — use `rg` instead (same pattern, PCRE is
+available via `rg -P`), or drop the lookahead and confirm by eye that every sensitive key printed
+has `"[Redacted]"` as its value.
 
 ## After Writing Code
 

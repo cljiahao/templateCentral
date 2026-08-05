@@ -5,244 +5,6 @@
 
 Write these files exactly as shown. Do not modify.
 
-### `src/components/ui/field.tsx`
-
-```tsx
-'use client';
-
-import type { ComponentProps, ReactNode } from 'react';
-import { useMemo } from 'react';
-
-import { cva, type VariantProps } from 'class-variance-authority';
-
-import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
-import { cn } from '@/lib/utils';
-
-function FieldSet({ className, ...props }: ComponentProps<'fieldset'>) {
-  return (
-    <fieldset
-      data-slot="field-set"
-      className={cn(
-        'flex flex-col gap-6',
-        'has-[>[data-slot=checkbox-group]]:gap-3 has-[>[data-slot=radio-group]]:gap-3',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function FieldLegend({
-  className,
-  variant = 'legend',
-  ...props
-}: ComponentProps<'legend'> & { variant?: 'legend' | 'label' }) {
-  return (
-    <legend
-      data-slot="field-legend"
-      data-variant={variant}
-      className={cn(
-        'mb-3 font-medium',
-        'data-[variant=legend]:text-base',
-        'data-[variant=label]:text-sm',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function FieldGroup({ className, ...props }: ComponentProps<'div'>) {
-  return (
-    <div
-      data-slot="field-group"
-      className={cn(
-        'group/field-group @container/field-group flex w-full flex-col gap-7 data-[slot=checkbox-group]:gap-3 [&>[data-slot=field-group]]:gap-4',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-const fieldVariants = cva(
-  'group/field flex w-full gap-3 data-[invalid=true]:text-destructive',
-  {
-    variants: {
-      orientation: {
-        vertical: ['flex-col [&>*]:w-full [&>.sr-only]:w-auto'],
-        horizontal: [
-          'flex-row items-center',
-          '[&>[data-slot=field-label]]:flex-auto',
-          'has-[>[data-slot=field-content]]:items-start has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px',
-        ],
-        responsive: [
-          'flex-col [&>*]:w-full [&>.sr-only]:w-auto @md/field-group:flex-row @md/field-group:items-center @md/field-group:[&>*]:w-auto',
-          '@md/field-group:[&>[data-slot=field-label]]:flex-auto',
-          '@md/field-group:has-[>[data-slot=field-content]]:items-start @md/field-group:has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px',
-        ],
-      },
-    },
-    defaultVariants: {
-      orientation: 'vertical',
-    },
-  }
-);
-
-function Field({
-  className,
-  orientation = 'vertical',
-  ...props
-}: ComponentProps<'div'> & VariantProps<typeof fieldVariants>) {
-  return (
-    <div
-      role="group"
-      data-slot="field"
-      data-orientation={orientation}
-      className={cn(fieldVariants({ orientation }), className)}
-      {...props}
-    />
-  );
-}
-
-function FieldContent({ className, ...props }: ComponentProps<'div'>) {
-  return (
-    <div
-      data-slot="field-content"
-      className={cn(
-        'group/field-content flex flex-1 flex-col gap-1.5 leading-snug',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function FieldLabel({
-  className,
-  ...props
-}: ComponentProps<typeof Label>) {
-  return (
-    <Label
-      data-slot="field-label"
-      className={cn(
-        'group/field-label peer/field-label flex w-fit gap-2 leading-snug group-data-[disabled=true]/field:opacity-50',
-        'has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-[>[data-slot=field]]:rounded-md has-[>[data-slot=field]]:border [&>*]:data-[slot=field]:p-4',
-        'has-data-[state=checked]:bg-primary/5 has-data-[state=checked]:border-primary dark:has-data-[state=checked]:bg-primary/10',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function FieldTitle({ className, ...props }: ComponentProps<'div'>) {
-  return (
-    <div
-      data-slot="field-label"
-      className={cn(
-        'flex w-fit items-center gap-2 text-sm leading-snug font-medium group-data-[disabled=true]/field:opacity-50',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function FieldDescription({ className, ...props }: ComponentProps<'p'>) {
-  return (
-    <p
-      data-slot="field-description"
-      className={cn(
-        'text-muted-foreground text-sm leading-normal font-normal group-has-[[data-orientation=horizontal]]/field:text-balance',
-        'last:mt-0 nth-last-2:-mt-1 [[data-variant=legend]+&]:-mt-1.5',
-        '[&>a:hover]:text-primary [&>a]:underline [&>a]:underline-offset-4',
-        className
-      )}
-      {...props}
-    />
-  );
-}
-
-function FieldSeparator({
-  children,
-  className,
-  ...props
-}: ComponentProps<'div'> & { children?: ReactNode }) {
-  return (
-    <div
-      data-slot="field-separator"
-      data-content={!!children}
-      className={cn(
-        'relative -my-2 h-5 text-sm group-data-[variant=outline]/field-group:-mb-2',
-        className
-      )}
-      {...props}
-    >
-      <Separator className="absolute inset-0 top-1/2" />
-      {children && (
-        <span
-          className="bg-background text-muted-foreground relative mx-auto block w-fit px-2"
-          data-slot="field-separator-content"
-        >
-          {children}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function FieldError({
-  className,
-  children,
-  errors,
-  ...props
-}: ComponentProps<'div'> & {
-  errors?: Array<{ message?: string } | undefined>;
-}) {
-  const content = useMemo(() => {
-    if (children) return children;
-    if (!errors?.length) return null;
-    if (errors?.length === 1) return errors[0]?.message;
-    return (
-      <ul className="ml-4 flex list-disc flex-col gap-1">
-        {errors.map(
-          (error, index) =>
-            error?.message && <li key={index}>{error.message}</li>
-        )}
-      </ul>
-    );
-  }, [children, errors]);
-
-  if (!content) return null;
-
-  return (
-    <div
-      role="alert"
-      data-slot="field-error"
-      className={cn('text-destructive text-sm font-normal', className)}
-      {...props}
-    >
-      {content}
-    </div>
-  );
-}
-
-export {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-  FieldLegend,
-  FieldSeparator,
-  FieldSet,
-  FieldTitle,
-};
-```
-
 ### `src/components/widgets/custom-form-field.tsx`
 
 ```tsx
@@ -576,6 +338,27 @@ export function BrandLogo({ className }: BrandLogoProps) {
 }
 ```
 
+### `public/image_assets/logo.svg`
+
+> **Required.** `BrandLogo` resolves this path at build time, and the Dockerfile copies `public/` into the runner stage — the build fails outright if `public/` does not exist. This is a placeholder; the user replaces it with their own logo.
+
+```svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Logo">
+  <rect width="64" height="64" rx="14" fill="#6366f1" />
+  <path d="M20 40 L32 20 L44 40 Z" fill="#ffffff" />
+</svg>
+```
+
+### `public/image_assets/default-square.svg`
+
+> **Required.** Default `src` for `FloatingShape` — see the note above on why `public/` must exist.
+
+```svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Decorative square">
+  <rect x="8" y="8" width="48" height="48" rx="10" fill="#a5b4fc" />
+</svg>
+```
+
 ### `src/components/widgets/brand-text.tsx`
 
 > **Note:** After writing this file, update the text content to match the actual project name. Replace `template` and `Central` with the project's brand name split appropriately, or simplify to a single `<span>` if no gradient split is needed.
@@ -814,7 +597,7 @@ export class APIError extends Error {
 ### `src/integrations/clients/base/https-agent.ts`
 
 ```ts
-import https from 'https';
+import https from 'node:https';
 
 export interface HttpsAgentOptions {
   cert?: string | Buffer;
@@ -871,6 +654,8 @@ const BINARY_CONTENT_TYPES = [
   'audio/',
 ];
 
+const REQUEST_TIMEOUT_MS = 30_000;
+
 const TEXT_CONTENT_TYPES = [
   'text/plain',
   'text/html',
@@ -906,6 +691,9 @@ export abstract class FetchClient {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
+      // Node's fetch has no default timeout — an unresponsive upstream would pin
+      // the calling route handler open indefinitely without this.
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
     if (!res.ok) {
@@ -1197,7 +985,46 @@ export default function RootLayout({
 }
 ```
 
-### `src/app/api/route.ts`
+### `src/app/error.tsx`
+
+Root-level error boundary — catches any render-phase error not caught by a more specific route-segment `error.tsx` (see `templatecentral:add (page)` Step 4 for adding one scoped to a specific route).
+
+```tsx
+'use client';
+
+import { useEffect } from 'react';
+
+import { Button } from '@/components/ui/button';
+import { logError } from '@/lib/errors/error-log-handler';
+
+export default function GlobalError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  useEffect(() => {
+    logError('app.error-boundary', error);
+  }, [error]);
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4">
+      <h2 className="text-lg font-semibold">Something went wrong</h2>
+      {error.digest && (
+        <p className="text-muted-foreground text-sm">Reference: {error.digest}</p>
+      )}
+      <Button onClick={reset}>Try again</Button>
+    </div>
+  );
+}
+```
+
+### `src/app/api/health/route.ts`
+
+> The single health endpoint. `/api/health` is the path the Dockerfile `HEALTHCHECK` probes and the
+> only one `templatecentral:add (auth)` puts in `PUBLIC_API_PREFIXES` — do not add a sibling handler
+> at `/api`, which would start returning 401 the moment auth lands.
 
 ```ts
 import { type NextRequest, NextResponse } from 'next/server';
@@ -1206,21 +1033,6 @@ import { withLogging } from '@/lib/utils/with-logging';
 
 // Every route handler is wrapped in withLogging — the base scaffold models the pattern
 // its own health checks depend on, and the lint gate (see AGENTS.md) enforces it.
-export const GET = withLogging(async (_req: NextRequest): Promise<NextResponse> => {
-  return NextResponse.json(
-    { status: 'ok', timestamp: new Date().toISOString() },
-    { status: 200 },
-  );
-});
-```
-
-### `src/app/api/health/route.ts`
-
-```ts
-import { type NextRequest, NextResponse } from 'next/server';
-
-import { withLogging } from '@/lib/utils/with-logging';
-
 export const GET = withLogging(async (_req: NextRequest): Promise<NextResponse> => {
   return NextResponse.json(
     { status: 'ok', timestamp: new Date().toISOString() },
@@ -1339,6 +1151,9 @@ import { type NextRequest } from 'next/server';
 // TRUST_PROXY: set to the number of trusted proxy hops in front of the app
 // (1 = ALB → App, 2 = ALB → Traefik → App); empty/unset = X-Forwarded-*
 // headers are not trusted. A hop count is truthy, so the checks below hold.
+// Callers MUST validate the resolved host against an ALLOWED_HOSTS set before using
+// this in any emitted URL (password reset links, OAuth callbacks, etc.) — this
+// function alone does not prevent Host header injection.
 export function getAppOrigin(request: NextRequest): string {
   const trustProxy = process.env.TRUST_PROXY;
   const proto = (trustProxy
@@ -1898,22 +1713,11 @@ export function SiteFooter({
 import { describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
 
-import { GET as getRootHealth } from '@/app/api/route';
 import { GET as getHealthPath } from '@/app/api/health/route';
 
 function makeRequest(url: string): NextRequest {
   return new NextRequest(url);
 }
-
-describe('GET /api (root health)', () => {
-  it('returns ok with 200', async () => {
-    const response = await getRootHealth(makeRequest('http://localhost/api'));
-    const data = await response.json();
-    expect(response.status).toBe(200);
-    expect(data.status).toBe('ok');
-    expect(data.timestamp).toBeDefined();
-  });
-});
 
 describe('GET /api/health (Docker / probe path)', () => {
   it('returns ok with 200', async () => {
@@ -1999,8 +1803,10 @@ pnpm install
 `components.json` was written in Step 1 — no interactive init needed. Add primitives directly:
 
 ```bash
-npx shadcn@latest add button card dialog form input label select separator sonner tabs textarea
+npx shadcn@latest add button card dialog field form input label select separator sonner tabs textarea
 ```
+
+`field` is a registry component — the CLI owns it, never hand-write or hand-edit that file. `src/components/widgets/custom-form-field.tsx` imports from `@/components/ui/field`, so the `field` install must succeed before the verification gate.
 
 ### 5. Copy `.env.example` to `.env.local`
 
@@ -2012,7 +1818,7 @@ Never commit `.env.local`.
 
 ### 5b. Run verification gate before generating AGENTS.md
 
-Do not generate AGENTS.md until this passes. Substitute `<stack>-verify` with the delta-table verify-skill name (e.g. `next-verify`).
+Do not generate AGENTS.md until this passes.
 
 ```bash
 pnpm format      # Run this once before pnpm check — normalizes any formatting drift from file creation

@@ -13,9 +13,9 @@ This file is the single source of truth for the Claude Code agent harness seeded
 | Stack | JSON-parsing runtime | Typecheck feedback cmd | Stop-checks test cmd | Verify-skill name(s) | Quality-gate line in CONSTITUTION §6 |
 |-------|----------------------|------------------------|----------------------|----------------------|---------------------------------------|
 | **fastapi** | `python3` | `python -m pyright src/ 2>&1 \| tail -5` | `python -m pytest test/ -q` | `api-verify` | `python -m pyright src/ && ruff check src/ && python -m pytest test/ -q` (the `/api-verify` skill) |
-| **nestjs** | `node` | `pnpm exec tsc --noEmit --incremental 2>&1 \| tail -5` | `pnpm test --run` | `nest-verify` | `pnpm check` |
-| **nextjs** | `node` | `pnpm exec tsc --noEmit --incremental 2>&1 \| tail -5` | `pnpm test --run` | `next-verify` + `next-migrate` | `pnpm check` |
-| **vite-react** | `node` | `pnpm exec tsc --noEmit --incremental 2>&1 \| tail -5` | `pnpm test --run` | `vite-verify` | `pnpm check` |
+| **nestjs** | `node` | `pnpm exec tsc --noEmit --incremental 2>&1 \| tail -5` | `pnpm test` | `nest-verify` | `pnpm check` |
+| **nextjs** | `node` | `pnpm exec tsc --noEmit --incremental 2>&1 \| tail -5` | `pnpm test` | `next-verify` + `next-migrate` | `pnpm check` |
+| **vite-react** | `node` | `pnpm exec tsc --noEmit --incremental 2>&1 \| tail -5` | `pnpm test` | `vite-verify` | `pnpm check` |
 
 **Additional per-stack notes:**
 - `user-prompt-guard` filename: `user-prompt-guard.py` for **fastapi**; `user-prompt-guard.cjs` for all TS stacks (`.cjs`, not `.js` — the scaffold's `package.json` sets `"type": "module"` for Next.js/Vite+React, which makes plain `.js` load as ESM and `require()` throw; `.cjs` forces CommonJS regardless of that field).
@@ -247,8 +247,8 @@ case "$rel" in
 esac
 if [ -n "$reason" ]; then
   # Emit permissionDecision "ask" so Claude Code prompts for human approval before the write.
-  # (The old `exit 1` + stderr was NON-blocking on PreToolUse — the edit went through and the
-  # warning never reached the model. "ask" actually gates the write.)
+  # (`exit 1` + stderr is NON-blocking on PreToolUse — the edit goes through and the warning
+  # never reaches the model. Only "ask" actually gates the write.)
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"PROTECTED FILE: %s — %s. Confirm human approval and note it in the PR."}}\n' "$rel" "$reason"
   exit 0
 fi
@@ -309,8 +309,8 @@ case "$rel" in
 esac
 if [ -n "$reason" ]; then
   # Emit permissionDecision "ask" so Claude Code prompts for human approval before the write.
-  # (The old `exit 1` + stderr was NON-blocking on PreToolUse — the edit went through and the
-  # warning never reached the model. "ask" actually gates the write.)
+  # (`exit 1` + stderr is NON-blocking on PreToolUse — the edit goes through and the warning
+  # never reaches the model. Only "ask" actually gates the write.)
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"PROTECTED FILE: %s — %s. Confirm human approval and note it in the PR."}}\n' "$rel" "$reason"
   exit 0
 fi
@@ -705,7 +705,7 @@ input=$(cat)
 active=$(printf '%s' "$input" | node -e "let b='';process.stdin.on('data',c=>b+=c);process.stdin.on('end',()=>{try{process.stdout.write(String(JSON.parse(b||'{}').stop_hook_active||false))}catch(e){process.stdout.write('false')}})" 2>/dev/null)
 [ "$active" = "true" ] || [ "$active" = "True" ] && exit 0
 command -v pnpm >/dev/null 2>&1 || { echo "pnpm unavailable — skipping Stop gate" >&2; exit 0; }
-OUTPUT=$(pnpm test --run 2>&1); EC=$?
+OUTPUT=$(pnpm test 2>&1); EC=$?
 echo "$OUTPUT" | tail -20 >&2
 [ $EC -ne 0 ] && exit 2 || exit 0
 ```
@@ -919,8 +919,10 @@ pre-push:
     harness-integrity:
       run: bash .claude/verify-harness.sh
     verify:
-      run: pnpm run check && pnpm test -- --run
+      run: pnpm run check && pnpm test
 ```
+
+> **Re-sync hooks after writing this file:** the `"prepare": "lefthook install || true"` script (Step 4's `pnpm install`) already ran before this file existed, so lefthook wrote a stub config and only `.git/hooks/prepare-commit-msg` is wired. Run `pnpm exec lefthook install` now — otherwise `pre-commit`/`pre-push` never actually fire on a fresh scaffold.
 
 **`lefthook.yml`** — FastAPI (Python tools; no pnpm):
 ```yaml
@@ -1021,6 +1023,8 @@ pre-push:
     verify:
       run: '[ -f .venv/bin/activate ] && . .venv/bin/activate; ruff check src/ && python -m pyright src/ && python -m pytest test/ -q'
 ```
+
+> **Re-sync hooks after writing this file:** run `lefthook install` (inside the venv) now — Step 4's `pip install -r requirements-dev.txt` does not auto-run it the way the TS `prepare` script does, so `.git/hooks` is empty until this runs at least once.
 
 **`.lefthook/commit-msg.sh`** (identical across stacks — Conventional Commits gate; lefthook passes the message-file path as `{1}`):
 ```bash
@@ -1467,7 +1471,7 @@ sha256_regenh=$(shasum -a 256 .claude/regen-harness.sh | cut -d' ' -f1)
 **`.claude/harness.json`** (substitute stack name, verify-skill path, and computed hashes):
 ```json
 {
-  "templatecentral_version": "5.13.0",
+  "templatecentral_version": "5.14.0",
   "stack": "<stack>",
   "seeded_at": "<ISO-date>",
   "seeded_files": {
@@ -1569,11 +1573,13 @@ After the stack-specific AGENTS.md is written (with the shared tail fragment app
 
 ## Step H. Install Claude Code plugins
 
-**Claude Code users only.** Install these plugins in the scaffolded project directory. These are **on by default** — skip only if the user explicitly opts out.
+**Claude Code users only.** Register the marketplaces, then install the plugins from them — `marketplace add` only registers a source, it does not install anything. These are **on by default** — skip only if the user explicitly opts out. Plugin installs are user-scoped, not project-directory-scoped.
 
 ```bash
 claude plugin marketplace add JuliusBrussee/caveman
+claude plugin install caveman
 claude plugin marketplace add obra/superpowers
+claude plugin install superpowers
 ```
 
 - **caveman** — compresses Claude output prose, reducing token cost in development sessions. Disable with `/caveman off` when writing committed files (`AGENTS.md`, `CLAUDE.md`, docs).

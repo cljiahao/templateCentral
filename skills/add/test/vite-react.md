@@ -168,10 +168,12 @@ const mockFetch = vi.fn();
 
 describe('ProjectService (API-backed)', () => {
   beforeEach(() => { vi.stubGlobal('fetch', mockFetch); });
-  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+  afterEach(() => { vi.resetAllMocks(); vi.unstubAllGlobals(); });
 
   it('fetches projects from API', async () => {
-    const projects = [{ id: '1', name: 'Alpha' }];
+    // Every field projectItemSchema requires must be present — ProjectService.getAll()
+    // runs the response through .parse(), so a short fixture throws before the assertion.
+    const projects = [{ id: '1', name: 'Alpha', status: 'active' }];
     mockFetch.mockResolvedValue(new Response(JSON.stringify(projects)));
 
     const result = await ProjectService.getAll();
@@ -214,11 +216,13 @@ function createWrapper() {
 
 describe('useProjects', () => {
   afterEach(() => {
-    vi.restoreAllMocks();
+    vi.resetAllMocks();
   });
 
   it('returns projects on success', async () => {
-    const projects = [{ id: '1', name: 'Alpha', status: 'active' }];
+    // `as const` is required: without it TS widens status to `string`, which is not
+    // assignable to ProjectItem['status'] ('active' | 'archived') and fails `tsc -b`.
+    const projects = [{ id: '1', name: 'Alpha', status: 'active' as const }];
     vi.mocked(ProjectService.getAll).mockResolvedValue(projects);
 
     const { result } = renderHook(() => useProjects(), {
@@ -295,7 +299,7 @@ Reuse the `createWrapper` factory shown in the hook-test example above — a fre
 - Mock at boundaries — mock `fetch`, service modules, or integration clients; NEVER mock internal utilities or React internals
 - Use Testing Library queries by role/text — `getByRole`, `getByText`, `getByLabelText`; NEVER use `querySelector` or test IDs unless no semantic alternative exists
 - Use `userEvent` over `fireEvent` — `userEvent.setup()` simulates real user behavior
-- Always call `vi.restoreAllMocks()` and `vi.unstubAllGlobals()` in `afterEach` — prevent mock leakage between tests
+- Always clear mocks and globals in `afterEach` — but pick the right reset. `vi.restoreAllMocks()` only undoes `vi.spyOn` spies; it does **nothing** to a standalone `vi.fn()` or to the `vi.fn()`s inside a `vi.mock` factory, so queued `mockResolvedValue`s leak into the next test. Use `vi.resetAllMocks()` whenever the file uses `vi.fn()` / `vi.mock`, `vi.restoreAllMocks()` when it uses `vi.spyOn`, and always pair with `vi.unstubAllGlobals()` if you called `vi.stubGlobal`
 - Create a fresh `QueryClient` per test — NEVER share a client across tests (stale cache causes flakes)
 - NEVER test implementation details — test what the user sees (components) or what the caller gets (services)
 - NEVER test third-party library behavior — test YOUR code's usage of it

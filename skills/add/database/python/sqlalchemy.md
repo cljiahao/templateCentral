@@ -107,28 +107,29 @@ def run_migrations_online():
 
 ### A6. Create a Model
 
-**`src/models/user.py`** (example):
+**`src/models/project.py`** (example — a generic entity; the `User` model is defined separately in the auth integration section below):
 
 ```python
-from sqlalchemy.orm import Mapped, mapped_column
+from uuid import uuid4
+
 from sqlalchemy import String
+from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
 
 
-class User(Base):
-    __tablename__ = "users"
+class Project(Base):
+    __tablename__ = "projects"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    email: Mapped[str] = mapped_column(String, unique=True, index=True)
-    name: Mapped[str] = mapped_column(String)
-    hashed_password: Mapped[str] = mapped_column(String)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    name: Mapped[str] = mapped_column(String, index=True)
+    description: Mapped[str] = mapped_column(String)
 ```
 
 ### A7. Generate First Migration
 
 ```bash
-alembic revision --autogenerate -m "create users table"
+alembic revision --autogenerate -m "create projects table"
 alembic upgrade head
 ```
 
@@ -145,13 +146,13 @@ from fastapi import Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.schemas.response.user import UserResponse  # create this schema
+from api.schemas.response.project import ProjectResponse  # create this schema
 from database.session import get_db
-from models.user import User
+from models.project import Project
 
-@router.get("/users", response_model=list[UserResponse])
-def list_users(db: Session = Depends(get_db)) -> Sequence[User]:
-    stmt = select(User)
+@router.get("/projects", response_model=list[ProjectResponse])
+def list_projects(db: Session = Depends(get_db)) -> Sequence[Project]:
+    stmt = select(Project)
     return db.scalars(stmt).all()
 ```
 
@@ -234,6 +235,10 @@ from sqlalchemy.orm import Session
 from api.repositories.user_repository import create_user, get_user_by_email, get_user_by_id
 from core.security import create_access_token, hash_password, verify_password
 
+# Verified on the miss path so an unknown email costs the same as a wrong
+# password — without it, response timing leaks which accounts exist.
+DUMMY_HASH = "$argon2id$v=19$m=65536,t=3,p=1$c29tZXNhbHRzb21lc2E$Rdo0OMHkQXBTOTBqNCn0mPvBGiLxvGBIbxKZ0nJ0Aqo"
+
 
 def register_user(db: Session, email: str, password: str, name: str) -> dict:
     if get_user_by_email(db, email):
@@ -252,7 +257,8 @@ def register_user(db: Session, email: str, password: str, name: str) -> dict:
 
 def login_user(db: Session, email: str, password: str) -> str:
     user = get_user_by_email(db, email)
-    if not user or not verify_password(password, user.hashed_password):
+    password_ok = verify_password(password, user.hashed_password if user else DUMMY_HASH)
+    if user is None or not password_ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials.",
@@ -279,7 +285,7 @@ from sqlalchemy.orm import Session
 from api.dependencies.auth import get_current_user
 from api.schemas.request.auth import LoginRequest, RegisterRequest
 from api.schemas.response.auth import TokenResponse, UserResponse
-from api.services.auth_service import login_user, register_user, get_user
+from api.services.auth_service import get_user, login_user, register_user
 from database.session import get_db
 
 router = APIRouter(prefix="/auth")

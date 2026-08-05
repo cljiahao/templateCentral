@@ -118,7 +118,8 @@ VITE_API_BASE_URL=/api
 
 # Next.js (add these — the template ships with NEXT_PUBLIC_BASE_URL only)
 NEXT_PUBLIC_BACKEND_URL=/api/external
-BACKEND_URL=http://localhost:8000  # server-side direct calls
+# server-side direct calls — never exposed to the browser
+BACKEND_URL=http://localhost:8000
 ```
 
 > **Security**: `NEXT_PUBLIC_BACKEND_URL` must be a **relative proxy path** (e.g., `/api/external`) — NEVER the actual backend server address (`http://...`). `NEXT_PUBLIC_*` vars are embedded in the client bundle and visible to users. Use `BACKEND_URL` (no `NEXT_PUBLIC_` prefix) for the real backend address — it stays server-side only.
@@ -164,8 +165,15 @@ Use `createAxiosClient` from the template's base client:
 // src/integrations/clients/backend-client.ts
 import { createAxiosClient } from './base/axios-client';
 
+// BACKEND_URL is absolute and server-side only; a relative fallback has no origin to
+// resolve against here, so fail at startup rather than ship a client that silently 404s
+const backendUrl = process.env.BACKEND_URL;
+if (!backendUrl) {
+  throw new Error('BACKEND_URL is not set — required for server-side backend calls');
+}
+
 export const backendClient = createAxiosClient({
-  baseURL: process.env.BACKEND_URL || '/api/external',
+  baseURL: backendUrl,
 });
 ```
 

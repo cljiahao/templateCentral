@@ -72,7 +72,10 @@ def _get_iam_token() -> str:
 engine = create_engine(
     f"postgresql+psycopg2://{api_settings.DATABASE_USER}@"
     f"{api_settings.DATABASE_HOST}:{api_settings.DATABASE_PORT}/{api_settings.DATABASE_NAME}",
-    connect_args={"sslmode": "require"},
+    # verify-full (not "require") — the IAM auth token is a ~15-minute bearer
+    # credential, so the server certificate must be verified against the AWS
+    # RDS CA bundle or an on-path attacker can intercept it.
+    connect_args={"sslmode": "verify-full", "sslrootcert": api_settings.RDS_CA_BUNDLE_PATH},
 )
 
 
@@ -104,6 +107,7 @@ class APISettings(BaseSettings):
     DATABASE_USER: str = Field(description="IAM database user")
     DATABASE_NAME: str = Field(description="Database name")
     AWS_REGION: str = Field(default="us-east-1", description="AWS region for RDS signer")
+    RDS_CA_BUNDLE_PATH: str = Field(description="Path to the AWS global RDS CA bundle used for sslmode=verify-full")
 ```
 
 Add to `src/.env` (local secrets — never commit) and document in `src/.env.default`:
@@ -114,6 +118,9 @@ DATABASE_PORT=5432
 DATABASE_USER=iam_db_user
 DATABASE_NAME=mydb
 AWS_REGION=us-east-1
+# AWS global RDS CA bundle — download from
+# https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+RDS_CA_BUNDLE_PATH=/path/to/global-bundle.pem
 ```
 
 ### A6. Update `alembic/env.py` for IAM fields
@@ -132,28 +139,29 @@ config.set_main_option("sqlalchemy.url", sqlalchemy_url)
 
 ### A7. Create a Model
 
-**`src/models/user.py`** (example):
+**`src/models/project.py`** (example — a generic entity; the `User` model comes from Step A of the auth integration section below):
 
 ```python
-from sqlalchemy.orm import Mapped, mapped_column
+from uuid import uuid4
+
 from sqlalchemy import String
+from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
 
 
-class User(Base):
-    __tablename__ = "users"
+class Project(Base):
+    __tablename__ = "projects"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    email: Mapped[str] = mapped_column(String, unique=True, index=True)
-    name: Mapped[str] = mapped_column(String)
-    hashed_password: Mapped[str] = mapped_column(String)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    name: Mapped[str] = mapped_column(String, index=True)
+    description: Mapped[str] = mapped_column(String)
 ```
 
 ### A8. Generate First Migration
 
 ```bash
-alembic revision --autogenerate -m "create users table"
+alembic revision --autogenerate -m "create projects table"
 alembic upgrade head
 ```
 
@@ -168,13 +176,13 @@ from fastapi import Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.schemas.response.user import UserResponse  # create this schema
+from api.schemas.response.project import ProjectResponse  # create this schema
 from database.session import get_db
-from models.user import User
+from models.project import Project
 
-@router.get("/users", response_model=list[UserResponse])
-def list_users(db: Session = Depends(get_db)) -> Sequence[User]:
-    stmt = select(User)
+@router.get("/projects", response_model=list[ProjectResponse])
+def list_projects(db: Session = Depends(get_db)) -> Sequence[Project]:
+    stmt = select(Project)
     return db.scalars(stmt).all()
 ```
 

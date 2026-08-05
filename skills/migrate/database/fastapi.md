@@ -5,7 +5,26 @@
 
 Migrates an existing SQLAlchemy (password auth) setup to SQLAlchemy + AWS IAM authentication.
 
-This is a **config-only change** — no schema or query code changes needed.
+On the application side this is a **config-only change** — no schema or query code changes needed. The AWS-side prerequisites in Step 0 are not optional: without them the app fails at connect time with an opaque `PAM authentication failed` error.
+
+> **Canonical source**: the session module (Step 2) and `alembic/env.py` block (Step 4) below
+> are duplicated verbatim from `add/database/python/sqlalchemy-iam.md` — treat that file as
+> canonical. `scripts/lint-skills.sh` fails the build if the two copies drift, so re-copy
+> rather than hand-editing here; the `sslmode` / `sslrootcert` connect args are the reason.
+
+### Step 0 — Prerequisites (AWS side, before any code change)
+
+Confirm all three with the user — none of them are things this skill can do for you:
+
+1. **IAM database authentication is enabled on the RDS instance** — `aws rds modify-db-instance --db-instance-identifier <id> --enable-iam-database-authentication --apply-immediately` (Aurora: `modify-db-cluster`).
+2. **The database user is IAM-enabled** — connect as a master user and run `GRANT rds_iam TO <user>;` (PostgreSQL). A user without the `rds_iam` role will reject every IAM token.
+3. **The application's IAM principal has an `rds-db:connect` policy** — resource ARN `arn:aws:rds-db:<region>:<account-id>:dbuid:<db-resource-id>/<db-user>`. The DB resource id is not the instance identifier — read it from `aws rds describe-db-instances`.
+
+4. **Download the AWS global RDS CA bundle** to a path readable by the app (needed for `sslmode=verify-full` in Step 2):
+
+```bash
+curl -o /path/to/global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+```
 
 ### Step 1 — Install boto3
 
@@ -44,7 +63,10 @@ def _get_iam_token() -> str:
 engine = create_engine(
     f"postgresql+psycopg2://{api_settings.DATABASE_USER}@"
     f"{api_settings.DATABASE_HOST}:{api_settings.DATABASE_PORT}/{api_settings.DATABASE_NAME}",
-    connect_args={"sslmode": "require"},
+    # verify-full (not "require") — the IAM auth token is a ~15-minute bearer
+    # credential, so the server certificate must be verified against the AWS
+    # RDS CA bundle or an on-path attacker can intercept it.
+    connect_args={"sslmode": "verify-full", "sslrootcert": api_settings.RDS_CA_BUNDLE_PATH},
 )
 
 
@@ -76,6 +98,7 @@ class APISettings(BaseSettings):
     DATABASE_USER: str = Field(description="IAM database user")
     DATABASE_NAME: str = Field(description="Database name")
     AWS_REGION: str = Field(default="us-east-1", description="AWS region for RDS signer")
+    RDS_CA_BUNDLE_PATH: str = Field(description="Path to the AWS global RDS CA bundle used for sslmode=verify-full")
 ```
 
 ### Step 4 — Update `alembic/env.py`
@@ -94,7 +117,7 @@ config.set_main_option("sqlalchemy.url", sqlalchemy_url)
 
 ### Step 5 — Update `src/.env` and `src/.env.default`
 
-Remove `DATABASE_URL`. Add:
+Update `src/.env.default` yourself. For `src/.env`, **ask the user** to remove `DATABASE_URL` and add the variables below — agent edits to `.env` files are hook-blocked by design; never write that file directly.
 
 ```
 DATABASE_HOST=your-rds-instance.region.rds.amazonaws.com
@@ -102,6 +125,8 @@ DATABASE_PORT=5432
 DATABASE_USER=iam_db_user
 DATABASE_NAME=mydb
 AWS_REGION=us-east-1
+# AWS global RDS CA bundle — downloaded in Step 0
+RDS_CA_BUNDLE_PATH=/path/to/global-bundle.pem
 ```
 
 ### Step 6 — Validate

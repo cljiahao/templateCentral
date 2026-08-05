@@ -56,22 +56,27 @@ export type GithubRepo = z.infer<typeof githubRepoSchema>;
 
 Extend the base `FetchClient` (at `src/integrations/clients/base/fetch-client.ts`) which handles response parsing, error mapping, and content-type negotiation:
 
+The client returns `unknown`, not the schema type. Nothing has been validated at this layer — a `request<GithubRepo[]>` annotation would be a type assertion over untrusted network data, and any caller reaching for the client directly would get a compile-time guarantee the runtime does not back. `unknown` makes the trust boundary explicit: the value is unusable until the service `safeParse()`s it below.
+
 ```ts
 // src/integrations/clients/github-client.ts
 import { FetchClient } from './base/fetch-client';
-import type { GithubRepo } from '../schemas/github-schemas';
 
 export class GithubClient extends FetchClient {
   constructor(baseUrl: string, token: string) {
     super(baseUrl, { Authorization: `Bearer ${token}` });
   }
 
-  async getRepos() {
-    return this.request<GithubRepo[]>('user/repos');
+  async getRepos(): Promise<unknown> {
+    return this.request<unknown>('user/repos');
   }
 
-  async getRepo(owner: string, repo: string) {
-    return this.request<GithubRepo>(`repos/${owner}/${repo}`);
+  async getRepo(owner: string, repo: string): Promise<unknown> {
+    // FetchClient.request concatenates the path onto the base URL — encode every
+    // interpolated segment so a value like `../../` cannot traverse off the intended path
+    return this.request<unknown>(
+      `repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+    );
   }
 }
 ```
@@ -80,6 +85,7 @@ export class GithubClient extends FetchClient {
 
 ```ts
 // src/integrations/services/github-service.ts
+import { APIError } from '@/integrations/error';
 import type { GithubClient } from '../clients/github-client';
 import { githubRepoSchema, type GithubRepo } from '../schemas/github-schemas';
 
@@ -88,7 +94,15 @@ export class GithubService {
 
   async getRepos(): Promise<GithubRepo[]> {
     const data = await this.client.getRepos();
-    return githubRepoSchema.array().parse(data);
+    // safeParse, not parse — a raw ZodError escaping the integration layer bypasses
+    // the APIError contract every consumer of this layer relies on
+    const parsed = githubRepoSchema.array().safeParse(data);
+
+    if (!parsed.success) {
+      throw new APIError({ statusCode: 502, data: { message: 'Invalid GitHub API response' } });
+    }
+
+    return parsed.data;
   }
 }
 ```

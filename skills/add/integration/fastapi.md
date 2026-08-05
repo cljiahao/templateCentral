@@ -9,6 +9,8 @@ Create a new third-party API integration in a FastAPI project scaffolded from te
 
 Requires a project scaffolded with `templatecentral:scaffold`. See Step 0.
 
+> **Placeholder names**: `<name>` in the file paths below and `github`/`Github`/`GITHUB` in the code are the same integration name in three casings. Substitute your actual service name for all of them (e.g. `stripe`/`Stripe`/`STRIPE`) — writing a literal `<name>_client.py` while the imports still say `integrations.github_client` breaks every import in this skill.
+
 ### Architecture
 
 ```
@@ -53,6 +55,7 @@ touch src/integrations/__init__.py src/api/dependencies/__init__.py
 
 ```python
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -75,7 +78,9 @@ class GithubClient:
 
     async def get_repo(self, owner: str, repo: str) -> dict[str, Any]:
         """Fetch a specific repository."""
-        response = await self._client.get(f"/repos/{owner}/{repo}")
+        # quote(safe="") escapes "/" and "." too — caller-supplied segments
+        # would otherwise let "../" traverse to an unintended upstream path.
+        response = await self._client.get(f"/repos/{quote(owner, safe='')}/{quote(repo, safe='')}")
         response.raise_for_status()
         return response.json()
 
@@ -109,7 +114,13 @@ class GithubRepo(BaseModel):
 
 **`src/integrations/<name>_service.py`**:
 
+The service is the layer that turns upstream transport failures into domain errors. Without this, `raise_for_status()` lets `httpx.HTTPStatusError` escape to the catch-all handler and an upstream 404 or timeout reaches the client as a generic 500.
+
 ```python
+import httpx
+from fastapi import HTTPException, status
+
+from core.exceptions import NoResultsFound
 from integrations.github_client import GithubClient
 from integrations.github_schemas import GithubRepo
 
@@ -127,9 +138,24 @@ class GithubService:
 
     async def get_repo(self, owner: str, repo: str) -> GithubRepo:
         """Fetch and validate a single repo."""
-        raw = await self._client.get_repo(owner, repo)
+        try:
+            raw = await self._client.get_repo(owner, repo)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == status.HTTP_404_NOT_FOUND:
+                raise NoResultsFound(f"Repository {owner}/{repo} not found.") from exc
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Upstream GitHub API returned an error.",
+            ) from exc
+        except httpx.RequestError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Upstream GitHub API is unreachable.",
+            ) from exc
         return GithubRepo.model_validate(raw)
 ```
+
+> `NoResultsFound` (from `src/core/exceptions.py`) already maps to a 404 via the scaffold's exception handler in `src/app.py`. Transport and non-404 upstream failures map to 504/502 so a broken dependency is never reported as a bug in this service.
 
 #### 5. Add Config
 
@@ -158,8 +184,6 @@ GITHUB_TOKEN=your_github_token_here
 
 ```python
 from collections.abc import AsyncGenerator
-
-from fastapi import Depends
 
 from core.config import api_settings
 from integrations.github_client import GithubClient
@@ -222,6 +246,8 @@ The router will not be reachable until it is registered here — this step is ma
 - Use `httpx.AsyncClient` for async HTTP — not `requests`.
 - Validate all external responses with Pydantic schemas before returning to callers.
 - Client handles HTTP only — no business logic. Service handles business logic.
+- URL-encode every caller-supplied path segment with `quote(value, safe="")` — unencoded segments allow path injection into the upstream API.
+- Catch `httpx.HTTPStatusError` and `httpx.RequestError` in the service — never let them reach the catch-all handler as a 500.
 - Use FastAPI dependencies for lifecycle management (create → yield → close).
 - Keep API tokens in environment variables / config — never hardcode.
 - Place integration files in `src/integrations/` — not in `api/`.

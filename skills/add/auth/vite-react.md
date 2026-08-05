@@ -51,6 +51,14 @@ Since Vite + React is a client-side SPA, authentication is handled by a backend 
 
 The `AuthProvider` is provider-agnostic — it manages local state. You wire it to your backend's auth endpoints.
 
+**Cookie sessions need CSRF protection.** The moment the browser attaches the session cookie automatically (which is exactly what `credentials: 'include'` buys you), any other origin can trigger an authenticated state-changing request. Cookies are still the right choice — they keep the token out of JS reach — but they must be paired with all three of:
+
+- **`SameSite=Lax`** on the session cookie as the baseline (backend-set, alongside `HttpOnly` and `Secure`). Use `SameSite=None` only when the SPA and API are on genuinely different sites, and then a token is mandatory, not optional.
+- **A CSRF token** on every non-GET request — the backend issues it (commonly as a readable `XSRF-TOKEN` cookie), the SPA echoes it back in an `X-CSRF-Token` header, and the backend rejects any mismatch. This double-submit pairing is what makes a cross-origin forgery fail: the attacker's page can send the session cookie but cannot read the token to echo it.
+- **A strict CORS allowlist** on the backend — never `Access-Control-Allow-Origin: *` together with credentials.
+
+Token-based (JWT in an `Authorization` header) auth is not cookie-borne and therefore not CSRF-exposed — but it forfeits `HttpOnly`, so the token must live in memory only (see the `localStorage` rule below).
+
 #### 2. Create an Auth Service
 
 Create `src/features/auth/api/auth-service.ts` to handle backend communication:
@@ -61,8 +69,10 @@ import { getApiBaseUrl } from '@/lib/constants/env';
 import { APIError } from '@/lib/errors';
 import type { AuthUser } from '../types';
 
-const API_BASE = getApiBaseUrl();
-const AUTH_BASE = `${API_BASE}/auth`;
+// Resolved per-request, never at module scope: getApiBaseUrl() throws when
+// VITE_API_BASE_URL is unset, and a module-scope throw kills bundle evaluation
+// before createRoot() runs — a blank page with no ErrorBoundary to catch it.
+const authBase = () => `${getApiBaseUrl()}/auth`;
 
 // Validate API response shapes at the boundary — mirrors the AuthUser type.
 const authUserSchema = z.object({
@@ -77,7 +87,7 @@ export async function loginWithCredentials(
   email: string,
   password: string
 ): Promise<AuthUser> {
-  const res = await fetch(`${AUTH_BASE}/login`, {
+  const res = await fetch(`${authBase()}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -92,13 +102,13 @@ export async function loginWithCredentials(
 }
 
 export async function fetchCurrentUser(): Promise<AuthUser | null> {
-  const res = await fetch(`${AUTH_BASE}/me`, { credentials: 'include' });
+  const res = await fetch(`${authBase()}/me`, { credentials: 'include' });
   if (!res.ok) return null;
   return authUserSchema.parse(await res.json());
 }
 
 export async function logoutUser(): Promise<void> {
-  await fetch(`${AUTH_BASE}/logout`, {
+  await fetch(`${authBase()}/logout`, {
     method: 'POST',
     credentials: 'include',
   });
@@ -146,6 +156,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     fetchCurrentUser()
       .then(setUser)
+      // A network failure or a ZodError from authUserSchema.parse() would otherwise
+      // reject unhandled and leave isLoading stuck; treat either as "not signed in".
+      .catch(() => setUser(null))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -221,7 +234,7 @@ export function LoginCard() {
   };
 
   const handleDevLogin = () => {
-    login({ id: 'dev', name: 'Dev User', email: 'dev@local' });
+    login(DEV_USER);
     navigate(PAGE_ROUTES.DASHBOARD);
   };
 
@@ -340,7 +353,7 @@ src/
 - NEVER store tokens in `localStorage` — use HttpOnly cookies (set by the backend) or in-memory state
 - NEVER remove the `ENV.IS_DEV` guard on the dev bypass — it must only exist in development
 - NEVER put auth logic directly in page components — use the `useAuth()` hook
-- Always use `credentials: 'include'` in fetch calls to send cookies to the backend
+- Always use `credentials: 'include'` in fetch calls to send cookies to the backend — and never without the CSRF pairing from Step 1 (`SameSite` + CSRF token on every non-GET request)
 - Always redirect to `/login` on 401 responses — the `ProtectedRoute` handles this for navigation, but API calls should also handle 401s gracefully
 - Keep the dev bypass pattern: `ENV.IS_DEV` → auto-authenticated dev user + "Dev login" button
 

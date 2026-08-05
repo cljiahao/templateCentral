@@ -70,7 +70,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
       }
       errorResponse = { error: 'Internal server error' };
     } else if (status === HttpStatus.BAD_REQUEST) {
-      errorResponse = { error: 'Bad request', details: { code: 'BAD_REQUEST' } };
+      // Pass-through: a thrower that already built an ErrorResponse body (e.g. the
+      // allowed-sort-field list from `templatecentral:add (pagination)`) keeps its
+      // details. Anything else collapses to a generic message.
+      const body: unknown = exception.getResponse();
+      errorResponse =
+        typeof body === 'object' && body !== null && 'error' in body
+          ? (body as ErrorResponse)
+          : { error: 'Bad request', details: { code: 'BAD_REQUEST' } };
     } else if (status === HttpStatus.UNAUTHORIZED) {
       errorResponse = { error: 'Authentication required' };
     } else if (status === HttpStatus.FORBIDDEN) {
@@ -112,17 +119,50 @@ export class AppNotFoundException extends HttpException {
 import { Injectable } from '@nestjs/common';
 import { AppNotFoundException } from '../../common/exceptions/not-found.exception';
 
+interface Project {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 @Injectable()
 export class ProjectsService {
-  async getProject(id: string) {
-    // replace with: await this.drizzle.db.select().from(projects).where(eq(projects.id, id)).then(r => r[0] ?? null)
-    const project = null;
+  // In-memory stand-in for the database client added by `templatecentral:add (database)`.
+  // Replace `read`/`write` with the real queries; `getProject`/`createProject` stay unchanged.
+  private readonly store = new Map<string, Project>();
+
+  private read(id: string): Promise<Project | undefined> {
+    // Swap for a Drizzle select-by-id once templatecentral:add (database) has run.
+    return Promise.resolve(this.store.get(id));
+  }
+
+  private write(project: Project): Promise<Project> {
+    // Swap for a Drizzle insert with .returning() once templatecentral:add (database) has run.
+    this.store.set(project.id, project);
+    return Promise.resolve(project);
+  }
+
+  async getProject(id: string): Promise<Project> {
+    const project = await this.read(id);
 
     if (!project) {
       throw new AppNotFoundException('Project not found');
     }
-    
+
     return project;
+  }
+
+  async createProject(dto: {
+    name: string;
+    description?: string;
+  }): Promise<Project> {
+    const created = await this.write({
+      id: crypto.randomUUID(),
+      name: dto.name,
+      description: dto.description,
+    });
+
+    return created;
   }
 }
 ```

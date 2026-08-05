@@ -97,7 +97,7 @@ api/           →  models/
 ### Security (FastAPI)
 
 **Environment & Secrets**
-- All config via Pydantic `BaseSettings` — env vars loaded by `load_dotenv()` in `src/main.py`; NEVER use `os.environ` directly
+- All config via Pydantic `BaseSettings` — env vars are loaded via `pydantic-settings`, which reads `src/.env` directly (works under both the direct `python src/main.py` and the Docker `uvicorn app:app --app-dir src` entry paths); NEVER use `os.environ` directly
 - Secrets (`SECRET_KEY`, `DATABASE_URL`, API keys) go in `src/.env` — NEVER commit or hardcode
 - Use `src/.env.default` for non-sensitive defaults only; secrets must be blank or absent
 

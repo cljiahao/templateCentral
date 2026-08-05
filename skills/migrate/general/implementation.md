@@ -23,11 +23,30 @@ Check `AGENTS.md` line 1 for a templateCentral version marker:
 
 **If no marker** → skip to Phase 1 (stack detection).
 
-**If marker present, version `@5.0.0` or later** → print:
-```
-✓ This project is at templateCentral v5.0.0 or later. No migration needed.
-```
-Exit.
+**If marker present, version `@5.0.0` or later** → check whether `.claude/harness.json` exists:
+
+- **`.claude/harness.json` exists** → print:
+  ```
+  ✓ This project is at templateCentral v5.0.0 or later. No migration needed.
+  ```
+  Exit (Phase 5's harness health check may still run — see Phase 5).
+
+- **`.claude/harness.json` does NOT exist** → the marker was written without the harness ever
+  being seeded (a Phase 3 light adoption writes the marker and nothing else). Do **not** exit.
+  Skip Phases 1–3 and present:
+  ```
+  ℹ️ This project carries a templateCentral <version> marker but has no harness
+     (.claude/harness.json is absent — it was adopted, not fully seeded).
+
+  Seed the full harness now? It adds:
+  - .claude/settings.json + .claude/hooks/  — the enforcement layer
+  - lefthook.yml, .gitleaks.toml, CI quality gates
+  - .claude/harness.json                    — the integrity manifest
+
+  Seed it? (A) Yes  (B) Skip
+  ```
+  User A → proceed to Phase 4.
+  User B → print "No changes made." Exit.
 
 **If marker present, version `@4.0.0` through `@4.x`** → skip Phases 1–3. Present:
 ```
@@ -185,7 +204,7 @@ cp AGENTS.md AGENTS.md.bak
 
 Replace `AGENTS.md` with the compressed template for the detected stack. If the upgrade fails at any point, restore with `cp AGENTS.md.bak AGENTS.md`. For `nextjs`, write exactly:
 
-```markdown
+~~~markdown
 <!-- templateCentral: nextjs@5.0.0 -->
 # AGENTS.md — [Project Name]
 
@@ -230,8 +249,7 @@ Skills in `.claude/skills/` are scoped to this project. Invoke with `/skill-name
 |-------|-------------|
 | `templatecentral:add (auth)` | JWT/OAuth/session auth |
 | `templatecentral:add (database)` | connect Drizzle/Kysely/Mongoose |
-| `templatecentral:add (feature)` | full feature: page + API route + hooks |
-| `templatecentral:add (feature)` | reusable UI component (components route via feature) |
+| `templatecentral:add (feature)` | full feature: page + API route + hooks; also the route for a reusable UI component |
 | `templatecentral:add (endpoint)` | API route with auth guard |
 | `templatecentral:migrate` | DB migrations or framework upgrades |
 | `templatecentral:standards` | drift check, validation patterns |
@@ -252,7 +270,7 @@ Skills in `.claude/skills/` are scoped to this project. Invoke with `/skill-name
 
 ## Project-Specific Notes
 <!-- [[post-harness]] — reserved for trace capture and meta-harness integration (v5.0+) -->
-```
+~~~
 
 For other stacks (fastapi, nestjs, vite-react): preserve all existing content in `AGENTS.md`. The `## AI Harness` tail is appended by harness-kit.md Step G (unconditionally, for every stack) — nothing to hand-append here.
 
@@ -295,13 +313,19 @@ Create the stack-specific verify skill in `.claude/skills/` only if it does not 
 
 | Stack | Skill file | Command |
 |-------|-----------|---------|
-| nextjs | `.claude/skills/next-verify/SKILL.md` | `pnpm exec tsc --noEmit --incremental && pnpm check && pnpm test --run` |
-| nestjs | `.claude/skills/nest-verify/SKILL.md` | `pnpm exec tsc --noEmit --incremental && pnpm check && pnpm test --run` |
-| vite-react | `.claude/skills/vite-verify/SKILL.md` | `pnpm exec tsc --noEmit --incremental && pnpm check && pnpm test --run` |
+| nextjs | `.claude/skills/next-verify/SKILL.md` | `pnpm exec tsc --noEmit --incremental && pnpm check && pnpm test` |
+| nestjs | `.claude/skills/nest-verify/SKILL.md` | `pnpm exec tsc --noEmit --incremental && pnpm check && pnpm test` |
+| vite-react | `.claude/skills/vite-verify/SKILL.md` | `pnpm exec tsc --noEmit --incremental && pnpm check && pnpm test` |
 | fastapi | `.claude/skills/api-verify/SKILL.md` | `python -m pyright src/ && ruff check src/ && python -m pytest test/ -q` |
 
 Template for TypeScript stacks (replace `<stack>` and `<command>`):
-```markdown
+
+`<stack>-verify` is **not** a literal substitution of the detected stack id — take the
+name from the table above (`next-verify`, `nest-verify`, `vite-verify`, `api-verify`),
+not `nextjs-verify`/`fastapi-verify`. The `name:` frontmatter field must match the
+directory name exactly.
+
+~~~markdown
 ---
 name: <stack>-verify
 description: Run typecheck, lint, and tests for this project in one pass
@@ -315,7 +339,7 @@ Run all quality checks in sequence:
 ```
 
 Report failures with the exact error output. Fix before proceeding.
-```
+~~~
 
 For nextjs only, also create `.claude/skills/next-migrate/SKILL.md` (`mkdir -p .claude/skills/next-migrate` first) if not present:
 ```markdown
@@ -376,13 +400,7 @@ rm .claude/skills/<name>.md
 
 Flat skill files (`.claude/skills/<name>.md`) are silently ignored by Claude Code — skills must be directories with a `SKILL.md` entrypoint (flat files work only under `.claude/commands/`). After moving each file, recompute the SHA-256 hash of the new path and update the corresponding entry in `.claude/harness.json`: change the `path` key from `.claude/skills/<name>.md` to `.claude/skills/<name>/SKILL.md` and update the `origin_hash` to match the moved file.
 
-If any flat file was converted above, this step created new directories (`.claude/skills/<name>/`) that did not exist when Step 4f-1c's documentation scan ran. Re-run it now so those directories — and `.claude/skills/README.md`'s `Contents` listing, which otherwise still names the old flat file — are current before Step 4i's commit:
-
-```bash
-cat "<skill-dir>/../scaffold/shared/documentation-kit.md"
-```
-
-Skip this re-run if Step 4g converted nothing (no flat files were found).
+No documentation refresh is needed for this step: the directories it creates live under `.claude/`, which the documentation kit prunes as harness-internal (documentation-kit.md Step 2 — the same prune that keeps the kit from writing into paths `protect-files.sh` blocks).
 
 **Step 4h: Update the version marker**
 
@@ -394,15 +412,32 @@ Confirm line 1 of `AGENTS.md` reads `<!-- templateCentral: <stack>@5.0.0 -->`.
 ✓ Upgraded to templateCentral v5.0.
 
 Changes made:
-  AGENTS.md              — Compressed to indexed format; marker updated to @5.0.0
-  CLAUDE.md              — Created (@AGENTS.md one-liner)
-  .claude/settings.json  — Created with PostToolUse hook
-  .claude/harness.json   — Created with origin hashes
+  AGENTS.md                      — Compressed to indexed format; marker updated to @5.0.0
+  CLAUDE.md                      — Created (@AGENTS.md one-liner)
+  .claude/settings.json          — Created/merged: permissions.deny secret-read block,
+                                   skillListingBudgetFraction, 7 hook events
+  .claude/hooks/*.sh             — 10 scripts: protect-files, block-no-verify,
+                                   user-prompt-guard, post-edit-typecheck,
+                                   post-edit-comment-check, post-tool-failure,
+                                   stop-checks, subagent-stop, session-context,
+                                   skill-usage-log
+  .claude/comment-hygiene-patterns.txt — canonical pattern list (hook + lefthook + CI)
+  lefthook.yml                   — git-hook layer
+  .lefthook/commit-msg.sh        — Conventional Commits gate
+  .gitleaks.toml                 — secret-scan config
+  .github/workflows/ci.yml       — CI quality gates
+  .claude/verify-harness.sh      — harness integrity verifier
+  .claude/regen-harness.sh       — canonical re-seed helper
+  .claude/skills/skill-audit/    — repeat-workflow surfacing skill
   .claude/skills/<stack>-verify/SKILL.md   (converted to directory form if previously flat)
   (nextjs only) .claude/skills/next-migrate/SKILL.md   (converted to directory form if previously flat)
-  README.md (per folder)  — created/refreshed via documentation-kit.md
+  .claude/harness.json           — Created with origin hashes for every file above
+  .claude/.harness-base/         — as-seeded snapshot (3-way-merge base for Phase 5d)
+  FUTURE.md                      — deferred-work log
+  docs/CONSTITUTION.md           — project invariants
+  README.md (per folder)         — created/refreshed via documentation-kit.md
 
-Commit these files together.
+Commit these files together — the harness only enforces as a complete set.
 ```
 
 ---
@@ -493,7 +528,7 @@ for p in <files written>; do mkdir -p ".claude/.harness-base/$(dirname "$p")"; c
 bash .claude/verify-harness.sh   # confirm the enforcement layer is clean post-sync
 ```
 
-If any `MISSING` file reseeded above required creating a directory that did not previously exist (e.g. a whole `.claude/skills/<name>/` folder), re-run the documentation kit so that new folder gets a `README.md` too, the same way Phase 4g re-runs it after its flat-to-directory conversion:
+If any `MISSING` file reseeded above required creating a directory that did not previously exist **outside** the paths documentation-kit.md Step 2 prunes (so `.lefthook/` or `docs/` count; anything under `.claude/`, `.github/`, or a secrets directory does not), re-run the documentation kit so that new folder gets a `README.md` too:
 ```bash
 cat "<skill-dir>/../scaffold/shared/documentation-kit.md"
 ```

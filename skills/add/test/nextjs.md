@@ -49,15 +49,17 @@ test/
 
 The Next.js template uses `globals: false` in Vitest — always import `describe`, `it`, `expect`, `vi`, `beforeEach`, `afterEach` explicitly from `'vitest'`.
 
-Import route handler functions directly and call them with `Request` objects — no HTTP server needed:
+Import route handler functions directly and call them with `NextRequest` objects — no HTTP server needed:
 
 ```ts
-import { GET } from '@/app/api/projects/route';
+import { NextRequest } from 'next/server';
 import { describe, expect, it } from 'vitest';
+
+import { GET } from '@/app/api/projects/route';
 
 describe('GET /api/projects', () => {
   it('should return all projects', async () => {
-    const response = await GET();
+    const response = await GET(new NextRequest('http://localhost/api/projects'));
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -66,9 +68,11 @@ describe('GET /api/projects', () => {
 });
 ```
 
-> **Why direct imports**: Next.js API route handlers are plain async functions that accept a `Request` and return a `Response`. Calling them directly is fast, requires no server setup, and gives full access to the response object.
+> **Why direct imports**: Next.js API route handlers are plain async functions that accept a request and return a response. Calling them directly is fast, requires no server setup, and gives full access to the response object.
 
-> **Note**: `DataService` in the examples below is a **placeholder** — the template's `src/integrations/factories.ts` starts empty. Replace it with whatever data access layer you've added via the `templatecentral:add (database)` or `templatecentral:add (integration)` skill. The mock pattern shown (module-level `vi.mock`, `vi.mocked` for type-safety) applies to any service you create.
+> **Always pass a `NextRequest`, never a plain `Request`.** `withLogging`-wrapped handlers are typed against `NextRequest` (it adds `nextUrl` and `cookies`), so a plain `Request` — or a zero-argument `GET()` call — fails `pnpm check` with a type error even though it would run fine at runtime.
+
+> **Note**: `ProjectService` in the examples below is a **placeholder** — the template's `src/integrations/factories.ts` starts empty. Replace it with whatever data access layer you've added via the `templatecentral:add (database)` or `templatecentral:add (integration)` skill. The mock pattern shown (module-level `vi.mock`, `vi.mocked` for type-safety) applies to any service you create.
 
 #### 1. Create the Test File
 
@@ -76,15 +80,17 @@ Place tests in `test/api/` matching the route path:
 
 | Route | Test file |
 |-------|-----------|
-| `src/app/api/route.ts` and `src/app/api/health/route.ts` | `test/api/health.test.ts` (template tests both probe paths) |
+| `src/app/api/health/route.ts` | `test/api/health.test.ts` (template tests the Docker probe path) |
 | `src/app/api/projects/route.ts` | `test/api/projects/route.test.ts` |
 | `src/app/api/projects/[id]/route.ts` | `test/api/projects/[id]/route.test.ts` |
 
 #### 2. Test GET Endpoints
 
 ```ts
-import { GET } from '@/app/api/projects/route';
+import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { GET } from '@/app/api/projects/route';
 
 // Mock your data access layer — replace path and export with your actual service.
 // Route handlers consume integration-layer services (never feature api/ services).
@@ -96,14 +102,14 @@ import { ProjectService } from '@/integrations/services/project-service';
 
 describe('GET /api/projects', () => {
   afterEach(() => {
-    vi.restoreAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should return projects with status 200', async () => {
     const mockProjects = [{ id: '1', name: 'Alpha' }];
     vi.mocked(ProjectService.getAll).mockResolvedValue(mockProjects);
 
-    const response = await GET();
+    const response = await GET(new NextRequest('http://localhost/api/projects'));
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -113,7 +119,7 @@ describe('GET /api/projects', () => {
   it('should return 500 when service throws', async () => {
     vi.mocked(ProjectService.getAll).mockRejectedValue(new Error('DB down'));
 
-    const response = await GET();
+    const response = await GET(new NextRequest('http://localhost/api/projects'));
 
     expect(response.status).toBe(500);
   });
@@ -123,8 +129,9 @@ describe('GET /api/projects', () => {
 #### 3. Test POST Endpoints with Validation
 
 ```ts
-import { POST } from '@/app/api/projects/route';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { POST } from '@/app/api/projects/route';
 
 vi.mock('@/integrations/services/project-service', () => ({
   ProjectService: { create: vi.fn() },
@@ -135,7 +142,7 @@ import { ProjectService } from '@/integrations/services/project-service';
 
 describe('POST /api/projects', () => {
   afterEach(() => {
-    vi.restoreAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should create a project and return 201', async () => {
@@ -163,8 +170,10 @@ describe('POST /api/projects', () => {
 #### 4. Test Dynamic Segment Routes
 
 ```ts
-import { GET } from '@/app/api/projects/[id]/route';
+import { NextRequest } from 'next/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { GET } from '@/app/api/projects/[id]/route';
 
 vi.mock('@/integrations/services/project-service', () => ({
   ProjectService: { getById: vi.fn() },
@@ -175,14 +184,14 @@ import { ProjectService } from '@/integrations/services/project-service';
 
 describe('GET /api/projects/[id]', () => {
   afterEach(() => {
-    vi.restoreAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should return a project by ID', async () => {
     const project = { id: '1', name: 'Alpha' };
     vi.mocked(ProjectService.getById).mockResolvedValue(project);
 
-    const request = new Request('http://localhost/api/projects/1');
+    const request = new NextRequest('http://localhost/api/projects/1');
     const response = await GET(request, makeParams({ id: '1' }));
     const data = await response.json();
 
@@ -193,7 +202,7 @@ describe('GET /api/projects/[id]', () => {
   it('should return 404 when project not found', async () => {
     vi.mocked(ProjectService.getById).mockResolvedValue(null);
 
-    const request = new Request('http://localhost/api/projects/999');
+    const request = new NextRequest('http://localhost/api/projects/999');
     const response = await GET(request, makeParams({ id: '999' }));
 
     expect(response.status).toBe(404);
@@ -227,11 +236,13 @@ Confirm the build succeeds and all tests pass.
 
 #### Request Factory
 
-Create a helper for building `Request` objects with JSON bodies:
+Create a helper for building `NextRequest` objects with JSON bodies:
 
 ```ts
-function jsonRequest(url: string, body: unknown, method = 'POST'): Request {
-  return new Request(url, {
+import { NextRequest } from 'next/server';
+
+function jsonRequest(url: string, body: unknown, method = 'POST'): NextRequest {
+  return new NextRequest(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -255,7 +266,7 @@ function makeParams<T extends Record<string, string>>(values: T) {
 - One concept per test — test a single behavior in each `it()` block
 - Mock at boundaries — mock your data access services (feature service modules, integration clients), not internal utilities
 - Use `vi.mock()` at module level and `vi.mocked()` for type-safe mock access
-- Always call `vi.restoreAllMocks()` in `afterEach` — prevent mock leakage between tests
+- Always call `vi.resetAllMocks()` in `afterEach` — prevent mock leakage between tests. `vi.restoreAllMocks()` is not enough: it only restores `vi.spyOn` spies, so a `mockResolvedValue` queued on a `vi.fn()` from a `vi.mock` factory (the pattern used above) survives into the next test. Setting `mockReset: true` in `vitest.config.ts` achieves the same thing globally.
 - Use descriptive test names — `it('should return 404 when project not found')`
 - NEVER test implementation details — test the HTTP status and response body, not how the handler calls services internally
 - NEVER share mutable state between tests — each test sets up its own mocks

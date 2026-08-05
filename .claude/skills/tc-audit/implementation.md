@@ -405,9 +405,9 @@ Read each file in full, apply checklist above:
 - [ ] `skills/review/update/implementation.md`
 - [ ] `skills/cleanup/remove-example/implementation.md`
 - [ ] `skills/cleanup/task-management/implementation.md`
-- [ ] `.claude/skills/write-skill/SKILL.md` ← authoring checklist; check it still matches CONVENTIONS.md
-- [ ] `.claude/skills/write-skill/implementation.md`
-- [ ] `.claude/skills/audit/implementation.md` ← this file; check it is still accurate
+- [ ] `.claude/skills/tc-write-skill/SKILL.md` ← authoring checklist; check it still matches CONVENTIONS.md
+- [ ] `.claude/skills/tc-write-skill/implementation.md`
+- [ ] `.claude/skills/tc-audit/implementation.md` ← this file; check it is still accurate
 
 **Cross-stack additional checks**:
 - [ ] `add/ai-security/implementation.md`: all LLM01–LLM10 sections present (lint now enforces this); OWASP LLM Top 10 version still current; Tier C references OWASP Agentic Top 10
@@ -551,7 +551,7 @@ bash scripts/lint-skills.sh skills/
 
 ### New semantic pattern → add to this skill
 
-If the issue requires judgment (context-dependent, not detectable by grep alone), add a checklist item to the relevant section of this file (`.claude/skills/audit/implementation.md`):
+If the issue requires judgment (context-dependent, not detectable by grep alone), add a checklist item to the relevant section of this file (`.claude/skills/tc-audit/implementation.md`):
 
 - Stack-specific issue → add under the appropriate stack section's "additional checks"
 - Cross-cutting issue → add under Step 3
@@ -571,7 +571,7 @@ If this audit repeatedly encountered a user need that no `templatecentral:add` c
 Commit the lint script and this skill together with the content fixes, so the audit history is traceable:
 
 ```bash
-git add scripts/lint-skills.sh .claude/skills/audit/SKILL.md .claude/skills/audit/implementation.md
+git add scripts/lint-skills.sh .claude/skills/tc-audit/SKILL.md .claude/skills/tc-audit/implementation.md
 git commit -m "audit: add <pattern> check to lint script and /tc-audit"
 ```
 

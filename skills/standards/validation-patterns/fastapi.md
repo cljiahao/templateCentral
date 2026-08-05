@@ -5,12 +5,14 @@
 
 **1. Request Model with Validation**
 
+Schemas live under `src/api/schemas/request/` and `src/api/schemas/response/`, one module per resource.
+
 ```python
-# src/api/projects/schemas.py
-from pydantic import BaseModel, Field, EmailStr
-from datetime import datetime
+# src/api/schemas/request/project.py
+from pydantic import Field
 
 from api.schemas.base import BaseRequestSchema
+
 
 class CreateProjectRequest(BaseRequestSchema):
     name: str = Field(..., min_length=1, max_length=100)
@@ -24,6 +26,13 @@ class CreateProjectRequest(BaseRequestSchema):
             }
         }
     }
+```
+
+```python
+# src/api/schemas/response/project.py
+from datetime import datetime
+
+from pydantic import BaseModel
 
 
 class ProjectResponse(BaseModel):
@@ -36,11 +45,23 @@ class ProjectResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+```
+
+```python
+# src/api/schemas/request/auth.py
+from pydantic import EmailStr, Field
+
+from api.schemas.base import BaseRequestSchema
 
 
 class LoginRequest(BaseRequestSchema):
     email: EmailStr
     password: str = Field(..., min_length=12)
+```
+
+```python
+# src/api/schemas/request/pagination.py
+from pydantic import BaseModel, Field
 
 
 class PaginationQuery(BaseModel):
@@ -52,14 +73,15 @@ class PaginationQuery(BaseModel):
 **2. API Endpoint with Validation**
 
 ```python
-# src/api/projects/routes.py
+# src/api/routers/projects.py
+from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Query, status, UploadFile, File
-from pydantic import ValidationError
+from fastapi import APIRouter, File, Query, UploadFile, status
 
+from api.schemas.request.project import CreateProjectRequest
+from api.schemas.response.project import ProjectResponse
 from core.exceptions import InvalidInputError
-from .schemas import CreateProjectRequest, ProjectResponse, PaginationQuery
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -72,8 +94,6 @@ async def create_project(req: CreateProjectRequest) -> ProjectResponse:
     Returns 422 if validation fails.
     """
     # req is guaranteed to be valid
-    # Your logic: project = await db.projects.create(req.model_dump())
-    from datetime import datetime
     project = ProjectResponse(
         id="1",
         name=req.name,
@@ -101,7 +121,10 @@ async def list_projects(
 @router.post("/upload", response_model=dict[str, dict[str, str]])
 async def upload_project_file(file: UploadFile = File(...)):
     """Upload a project file with validation."""
-    # Validate file type
+    # Validate file type. content_type is the client-supplied Content-Type header —
+    # trivially spoofable, so treat this as a cheap first filter only. For anything
+    # security-sensitive, follow up with magic-byte sniffing (e.g. python-magic) or
+    # server-side re-encoding before the file is stored or served.
     allowed_types = {"image/jpeg", "image/png", "application/pdf"}
     if file.content_type not in allowed_types:
         raise InvalidInputError(
@@ -125,56 +148,40 @@ async def upload_project_file(file: UploadFile = File(...)):
     if Path(file.filename).name != file.filename:
         raise InvalidInputError("Invalid filename")
 
-    # Safe to use: file.filename, contents
-    # await storage.save(file.filename, contents)
+    # Both file.filename and contents are validated — hand them to the storage layer here.
 
     return {"data": {"message": "File uploaded successfully"}}
 ```
 
 **3. Form Data Validation**
 
-```python
-# src/api/auth/routes.py
-from fastapi import APIRouter, Form, status
-from pydantic import ValidationError
+Annotate a Pydantic model with `Form()` — FastAPI validates form bodies against the model natively (model form data since 0.113, `extra="forbid"` support since 0.114). No manual parsing, and no risk of echoing the submitted password: a failure raises `RequestValidationError`, which the project's handler in `src/error_handler.py` turns into a sanitized 422.
 
-from core.exceptions import InvalidInputError
-from .schemas import LoginRequest
+```python
+# src/api/routers/auth.py
+from typing import Annotated
+
+from fastapi import APIRouter, Form, status
+
+from api.schemas.request.auth import LoginRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=dict[str, dict[str, str]], status_code=status.HTTP_200_OK)
-async def login(
-    email: str = Form(...),
-    password: str = Form(...),
-):
+async def login(req: Annotated[LoginRequest, Form()]):
     """Login via form data with validation."""
-    # Manually validate since FastAPI doesn't auto-validate Form data
-    try:
-        req = LoginRequest(email=email, password=password)
-    except ValidationError as e:
-        # NEVER interpolate the ValidationError itself — str(e) includes input_value,
-        # which echoes the submitted password into the 400 response and logs.
-        # Build a safe message from field locations + error types only.
-        safe = "; ".join(
-            f"{'.'.join(str(p) for p in err['loc'])}: {err['type']}"
-            for err in e.errors(include_input=False)
-        )
-        raise InvalidInputError(f"Validation failed: {safe}")
-
-    # Safe to use: req.email, req.password
-    # session = await auth.login(req.email, req.password)
-
+    # req is guaranteed to be valid — safe to use req.email, req.password
     return {"data": {"message": "Login successful"}}
 ```
 
 **4. External API Response Validation**
 
 ```python
-# src/integrations/services/github_service.py
-from pydantic import BaseModel, ValidationError, field_validator
+# src/integrations/github_service.py
 import httpx
+from pydantic import BaseModel, ValidationError, field_validator
+
 from core.exceptions import InvalidInputError
 
 class GitHubUser(BaseModel):
@@ -202,10 +209,10 @@ async def fetch_github_user(username: str) -> GitHubUser:
         data = response.json()
         user = GitHubUser.model_validate(data)  # Pydantic v2 idiomatic form; respects mode="before" validators
         return user
-    except ValidationError:
+    except ValidationError as e:
         # Never interpolate the raw ValidationError — its str() echoes the input values
         # (info disclosure). Log the detail server-side; return a generic message.
-        raise InvalidInputError("Invalid GitHub API response")
+        raise InvalidInputError("Invalid GitHub API response") from e
 ```
 
 ## Testing / Verification

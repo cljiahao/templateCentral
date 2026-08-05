@@ -75,7 +75,7 @@ export class UpdateItemDto extends createZodDto(CreateItemSchema.partial()) {}
 ### Error Handling
 
 - Use NestJS built-in exceptions: `NotFoundException`, `BadRequestException`, etc.
-- The global `HttpExceptionFilter` catches and formats all HTTP exceptions.
+- The global `HttpExceptionFilter` is registered with `@Catch(HttpException)` — it formats `HttpException` subclasses only. Non-`HttpException` throws (a raw `Error`, a `ZodError` escaping a manual `.parse()`, a driver error) bypass it and fall through to Nest's built-in handler as an unformatted 500. Convert those to an `HttpException` at the boundary rather than letting them escape.
 - For domain-specific errors, extend `HttpException`.
 
 ### Imports
@@ -129,6 +129,9 @@ Same-change Vitest for controllers, services, repositories, HTTP guards/pipes (`
 
 **CORS**
 - Origins restricted to `CLIENT_URL` — NEVER use `origin: '*'` in production
+
+**Rate Limiting & Proxy Trust**
+- Auth and other abuse-prone routes are rate-limited with `@nestjs/throttler`, and `TRUST_PROXY` must be set correctly whenever the app sits behind a load balancer or reverse proxy — otherwise every client shares the proxy's IP and the limiter is either useless or spoofable via `X-Forwarded-For`. Both are mandatory; see `templatecentral:add (auth)` for the configuration.
 
 **Auth**
 - Guard-based (Passport.js + JWT) — apply at controller or route level, not globally

@@ -152,16 +152,52 @@ export const GET = withLogging<RouteContext<{ id: string }>>(async (request, { p
 
 **3. Error Boundary Components**
 
+Both boundaries below render the same failure state, so it lives in one component. Keeping it separate also makes the fallback renderable in isolation — a Storybook story or a test can mount it without throwing anything:
+
+```tsx
+// src/components/layout/error-fallback.tsx
+'use client';
+
+import { Button } from '@/components/ui/button';
+
+interface ErrorFallbackProps {
+  error: Error;
+  onReset: () => void;
+}
+
+export function ErrorFallback({ error, onReset }: ErrorFallbackProps) {
+  return (
+    <div
+      role="alert"
+      className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center"
+    >
+      <h1 className="text-2xl font-bold">Something went wrong</h1>
+      <p className="text-muted-foreground max-w-md text-sm">
+        {process.env.NODE_ENV === 'development'
+          ? error.message
+          : 'An unexpected error occurred. Please try again later.'}
+      </p>
+      <Button type="button" onClick={onReset}>
+        Reload page
+      </Button>
+    </div>
+  );
+}
+```
+
 Class-based `ErrorBoundary` for catching synchronous React render errors:
 
 ```tsx
 // src/components/layout/error-boundary.tsx
 'use client';
 
-import { Component, type ReactNode } from 'react';
+import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { logError } from '@/lib/errors/error-log-handler';
+import { ErrorFallback } from './error-fallback';
 
 interface Props {
   children: ReactNode;
+  fallback?: ReactNode;
 }
 
 interface State {
@@ -178,24 +214,21 @@ export class ErrorBoundary extends Component<Props, State> {
     return { error };
   }
 
+  // getDerivedStateFromError only updates state — reporting belongs here, or every
+  // caught render error is swallowed and never reaches the logger.
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    logError('ErrorBoundary caught an error', error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Component stack:', errorInfo.componentStack);
+    }
+  }
+
   render() {
     if (this.state.error) {
+      if (this.props.fallback) return this.props.fallback;
+
       return (
-        <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
-          <h1 className="text-2xl font-bold">Something went wrong</h1>
-          <p className="text-muted-foreground max-w-md text-sm">
-            {process.env.NODE_ENV === 'development'
-              ? this.state.error.message
-              : 'An unexpected error occurred. Please try again later.'}
-          </p>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-4 py-2 text-sm font-medium transition-colors"
-          >
-            Reload page
-          </button>
-        </div>
+        <ErrorFallback error={this.state.error} onReset={() => window.location.reload()} />
       );
     }
 
@@ -212,6 +245,7 @@ Functional `AsyncErrorBoundary` for catching unhandled promise rejections:
 
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import { ErrorFallback } from './error-fallback';
 
 interface AsyncErrorBoundaryProps {
   children: ReactNode;
@@ -231,23 +265,7 @@ export function AsyncErrorBoundary({ children }: AsyncErrorBoundaryProps) {
   }, []);
 
   if (error) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center">
-        <h1 className="text-2xl font-bold">Something went wrong</h1>
-        <p className="text-muted-foreground max-w-md text-sm">
-          {process.env.NODE_ENV === 'development'
-            ? error.message
-            : 'An unexpected error occurred. Please try again later.'}
-        </p>
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-4 py-2 text-sm font-medium transition-colors"
-        >
-          Reload page
-        </button>
-      </div>
-    );
+    return <ErrorFallback error={error} onReset={() => window.location.reload()} />;
   }
 
   return <>{children}</>;

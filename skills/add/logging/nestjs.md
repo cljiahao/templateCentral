@@ -34,9 +34,24 @@ LoggerModule.forRoot({
       user_id: req.user?.id ?? null,
     }),
     level: process.env.LOG_LEVEL ?? 'info',
+    // Keep the scaffold's redact block. pino-http's default request serializer logs the
+    // whole headers object, so without it every request writes its bearer JWT and
+    // session cookies at info level.
+    redact: {
+      paths: [
+        'req.headers.authorization',
+        'req.headers.cookie',
+        'res.headers["set-cookie"]',
+      ],
+      remove: true,
+    },
   },
 }),
 ```
+
+> `redact` is set once, on the `pinoHttp` object. Because this snippet *extends* the
+> scaffold's existing `LoggerModule.forRoot` config, verify the block is present after
+> editing — replacing the config object wholesale silently drops it and re-opens the leak.
 
 Unhandled exceptions — do NOT re-copy the `HttpExceptionFilter` here; extend the filter from `templatecentral:add` (error-handling). If your copy lacks the status-logging block, add only these lines inside `catch()`, just before the final `reply.status(status).send(...)`:
 
@@ -265,7 +280,9 @@ curl http://localhost:3000/health
 # Trigger a slow DB query (or lower threshold temporarily to 0 for testing)
 # Expect: { name: "...", duration_ms: <n> } warn log
 
-# Confirm no prohibited fields
+# Confirm no prohibited fields leaked.
+# INVERTED CHECK: this grep must print NOTHING. Any match is a FAILURE — a prohibited
+# field reached the logs. Investigate immediately and do not ship until it is silent.
 grep -i "password\|secret\|token\|api_key\|email\|phone\|address\|credit_card" <log-output>
 ```
 

@@ -115,15 +115,17 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 ```python
 from datetime import datetime, timedelta, timezone
 
+import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
-import jwt
 
 from core.config import api_settings
 
 ALGORITHM = "HS256"
 
-_ph = PasswordHasher()  # argon2id, OWASP-recommended defaults
+# argon2id with OWASP-recommended parameters — t=3, m=64 MiB, p=1.
+# Set explicitly: argon2-cffi's library defaults differ from these.
+_ph = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=1)
 
 
 def hash_password(password: str) -> str:
@@ -187,7 +189,7 @@ def get_current_user(
 ```python
 from fastapi import HTTPException, status
 
-from core.security import create_access_token, hash_password, verify_password
+from core.security import hash_password
 
 
 def register_user(email: str, password: str, name: str) -> dict:
@@ -220,12 +222,11 @@ class APITags(StrEnum):
 **`src/api/routers/auth.py`**:
 
 ```python
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
 from api.schemas.request.auth import LoginRequest, RegisterRequest
 from api.schemas.response.auth import TokenResponse, UserResponse
 from api.services.auth_service import login_user, register_user
-from api.tags import APITags
 
 router = APIRouter(prefix="/auth")
 

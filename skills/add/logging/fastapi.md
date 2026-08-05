@@ -28,6 +28,8 @@ the marker.
 pip install "asgi-correlation-id>=4.3" && pip freeze > requirements.txt
 ```
 
+Define the middleware as a module-level function — `app` does not exist at import time (the scaffold builds it inside `start_application()`), so a top-level `@app.middleware("http")` decorator raises `NameError`.
+
 ```python
 # src/app.py
 import time
@@ -40,9 +42,6 @@ from fastapi import Request
 from core.logging import logger
 
 
-# @app.middleware("http") is LIFO — the last-registered runs outermost. Register this
-# request logger so it wraps the request outermost and sees the final response status.
-@app.middleware("http")
 async def log_requests(request: Request, call_next):
     # Bind the correlation id (set by CorrelationIdMiddleware) so every log line for this
     # request carries request_id — no threading it through call sites.
@@ -66,10 +65,11 @@ async def log_requests(request: Request, call_next):
         structlog.contextvars.clear_contextvars()
 ```
 
-Register `CorrelationIdMiddleware` in `start_application()` — it must run **before** (wrap) the request logger so the id is set when logs are emitted:
+Register both middlewares inside `start_application()`, the same way the scaffold's `configure_*` helpers register things. Middleware registration is LIFO — the **last** registered runs outermost — and `CorrelationIdMiddleware` must wrap the request logger so the correlation id contextvar is already set when `log_requests` reads it. So register `log_requests` **first** and `CorrelationIdMiddleware` **last**:
 
 ```python
-# src/app.py — inside start_application(), with the other app.add_middleware(...) calls
+# src/app.py — inside start_application(), after the other configure_*(app) calls
+app.middleware("http")(log_requests)
 app.add_middleware(CorrelationIdMiddleware)
 ```
 
@@ -115,7 +115,9 @@ async def login(credentials: LoginRequest, request: Request):
             # one-hop (ALB → App): TRUST_PROXY=<VPC CIDR, e.g. 10.0.0.0/8>;
             # two-hop (ALB → Traefik → App): TRUST_PROXY=10.0.0.0/8,172.16.0.0/12.
             # See `templatecentral:add` (auth) — Rate Limiting section.
-            ip=request.client.host,
+            # request.client is None on some ASGI transports — guard it, or this
+            # failure path raises AttributeError inside the failure path itself.
+            ip=request.client.host if request.client else None,
             # Never log: credentials.password
         )
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -286,8 +288,15 @@ curl http://localhost:8000/health
 # Trigger a slow DB query (or lower threshold temporarily to 0 for testing)
 # Expect: event="Slow DB query", query_name, duration_ms
 
-# Confirm no prohibited fields leak (the redaction processor should mask these by key)
-grep -i "password\|secret\|token\|api_key\|email\|phone\|address\|credit_card" <log-output>
+# Confirm no prohibited fields leak.
+# The redaction processor only masks the keys listed in `_SENSITIVE_KEYS` in
+# `src/core/logging.py` — read that list first, extend it with your domain's PII
+# (e.g. phone, address, national_id), then grep for the keys you expect masked:
+grep -i "password\|secret\|token\|authorization\|cookie" <log-output>
+
+# Anything you grep for that is NOT in `_SENSITIVE_KEYS` is unredacted by design —
+# a hit there means you must add the key to `_SENSITIVE_KEYS`, not that the
+# processor failed.
 ```
 
 ## After Writing Code

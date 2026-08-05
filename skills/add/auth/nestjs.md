@@ -5,7 +5,7 @@
 
 Add JWT-based authentication to a NestJS project scaffolded from templateCentral using Passport.js.
 
-> **Stub notice:** The `AuthService` created here is intentionally incomplete — both `register` and `login` throw `UnauthorizedException` until a database is available. Run `templatecentral:add` (database) after this skill to complete the integration.
+> **Stub notice:** The `AuthService` created here is intentionally incomplete — both `register` and `login` throw `NotImplementedException` (501) until a database is available. Run `templatecentral:add` (database) after this skill to complete the integration.
 
 ### Prerequisites
 
@@ -169,23 +169,34 @@ export class JwtAuthGuard extends AuthGuard('jwt') {}
 **`src/modules/auth/auth.service.ts`**:
 
 ```typescript
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, NotImplementedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
 import type { RegisterDto, LoginDto } from './auth.dto';
 
+// A missing database is an unimplemented feature (501), not a rejected credential (401):
+// returning 401 would tell clients the credentials were wrong when nothing was checked.
+// The remediation ("run templatecentral:add (database)") is operator-facing — it goes to
+// the server log, never into the HTTP response body.
+const STUB_REMEDIATION =
+  'AuthService is a stub. Run templatecentral:add (database) to generate the real implementation.';
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(private readonly jwtService: JwtService) {}
 
   // Both methods are deliberate stubs (synchronous throws, unused params prefixed with _)
   // until templatecentral:add (database) replaces them with real implementations.
   register(_dto: RegisterDto) {
-    throw new UnauthorizedException('Database integration required. Run templatecentral:add (database) to complete auth.');
+    this.logger.error(STUB_REMEDIATION);
+    throw new NotImplementedException('Not implemented.');
   }
 
   login(_dto: LoginDto) {
-    throw new UnauthorizedException('Database integration required. Run templatecentral:add (database) to complete auth.');
+    this.logger.error(STUB_REMEDIATION);
+    throw new NotImplementedException('Not implemented.');
   }
 }
 ```
@@ -303,7 +314,7 @@ getMe(@Req() req: FastifyRequest & { user: { id: string; email: string } }): { i
 
 ### Rate Limiting (Required for Production)
 
-Industry best practice: max 3 failed auth attempts per 15 minutes. Install `@nestjs/throttler`:
+Industry best practice: cap auth attempts at roughly 3 per 15 minutes per IP. Install `@nestjs/throttler`:
 
 ```bash
 pnpm add @nestjs/throttler
@@ -342,6 +353,8 @@ import { Throttle, minutes } from '@nestjs/throttler';
     return this.authService.login(dto);
   }
 ```
+
+> **`@Throttle` counts every request, not just failures.** A successful login consumes the same budget as a rejected one, so `limit: 3` means three total `/login` calls per IP per 15 minutes. Users behind a shared office NAT or mobile CGNAT share one bucket and will lock each other out — raise the limit for NAT-heavy audiences. To count only failures, subclass `ThrottlerGuard` and override `handleRequest` so the attempt is recorded after the handler resolves to a 401 rather than before it runs.
 
 ### Rules
 

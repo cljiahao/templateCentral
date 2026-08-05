@@ -22,7 +22,7 @@ mutmut>=3.5.0
 Install:
 
 ```bash
-pip install mutmut
+pip install -r requirements-dev.txt
 ```
 
 ### Steps
@@ -71,6 +71,9 @@ If `.github/workflows/` exists, add a `mutation` job to the primary workflow. It
         with:
           python-version: "3.13"
           cache: "pip"
+      # Runtime deps first — mutmut executes the test suite, which imports
+      # fastapi/pydantic/structlog; requirements-dev.txt alone is not enough.
+      - run: pip install -r requirements.txt
       - run: pip install -r requirements-dev.txt
       - run: mutmut run
       - run: mutmut results

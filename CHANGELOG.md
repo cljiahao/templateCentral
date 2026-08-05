@@ -10,6 +10,86 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [5.14.0] — 2026-08-05
+
+### Fixed — full-repo audit (all four stacks)
+
+A full audit ran in two passes: 5 parallel static reviews (every skill file read in full
+against accuracy/security/quality checklists) plus 4 parallel build verifications (actually
+scaffolding, installing, and building each stack), followed by empirical re-verification of
+every fix and a follow-up maintainability sweep for duplication/dead code/comment quality.
+
+**Harness (affects every scaffolded/migrated project, all stacks):**
+- lefthook installed a stub config before the real `lefthook.yml` existed (Step 4's
+  `pnpm install` ran the `prepare` script first), so pre-commit/pre-push hooks never
+  activated on a fresh scaffold. Fixed with an explicit re-install step after `lefthook.yml`
+  is written.
+- `pnpm test --run` (NestJS, Vite-React) expanded to `vitest --run --run`, which crashes
+  Vitest 4 outright — this permanently blocked the seeded Stop hook on every fresh scaffold.
+  Fixed at every call site (`harness-kit.md`, both scaffolds, `migrate/general`, `test`).
+- Step H ("Install Claude Code plugins") only registered marketplaces, never installed
+  anything — added the missing `claude plugin install` calls.
+- Added `check_duplicated_iam_blocks_match` and a byte-equality lint guard for other
+  security-sensitive blocks duplicated across `add/`/`migrate/` skill pairs, replacing
+  "keep in sync manually" comments with CI enforcement.
+
+**Security:**
+- NestJS: pino logged `Authorization`/`Cookie` headers verbatim by default (no `redact`
+  config) — fixed and verified live against a running server, both success and error paths,
+  dev and prod log transports.
+- FastAPI/NestJS: RDS IAM database auth used `sslmode=require`/`rejectUnauthorized: true`
+  with no CA bundle — encrypts without verifying server identity, letting an on-path
+  attacker intercept the ~15-minute IAM bearer token. Fixed to `verify-full` + the AWS
+  global RDS CA bundle across all four affected files (`sqlalchemy-iam.md`,
+  `migrate/database/fastapi.md`, `nestjs-kysely.md`, `migrate/database/nestjs.md`).
+- Account-enumeration timing oracles closed in every stack's login handler (FastAPI
+  SQLAlchemy + Beanie, NestJS Drizzle/Kysely/Mongoose) via a constant-time dummy-hash
+  comparison.
+- SSRF/path-injection fixes: unencoded path segments in integration API clients across
+  FastAPI, NestJS, Next.js, and Vite-React.
+- Next.js: a page-authoring skill instructed agents to skip server-side auth checks
+  entirely ("No manual auth checks needed in page components"), directly contradicting the
+  auth skill's own defense-in-depth requirement.
+
+**Correctness (would break a user's first build):**
+- FastAPI scaffold failed its own seeded CI gate on an untouched scaffold (`ruff format`
+  line-length) and baked the full dev toolchain into the production Docker image via
+  `pip freeze` ordering.
+- Vite-React scaffold: `pnpm format:write` (referenced in the verify gate) doesn't exist;
+  ~500 lines of hand-maintained shadcn components (`button-group`, `field`, `input-group`)
+  now install via the CLI instead, removing permanent drift risk against upstream.
+- Next.js scaffold: two image assets referenced by real components were never created,
+  which would hard-fail the Docker build's `COPY public/` step; a `withLogging` wrapper
+  argument-type mismatch broke every example in three downstream test/logging/endpoint
+  skills; an untyped empty-array placeholder (`const rows = []`) triggered `TS7034` under
+  `strict`, breaking `pnpm build` the moment the example was used.
+- Next.js scaffold shipped zero render-phase error containment (no `error.tsx` anywhere) —
+  added a root-level boundary wired to the scaffold's own `logError` utility.
+- Drizzle v1 API mismatch in the NestJS scaffold's Drizzle service code (the file predated
+  Drizzle's actual v1 API); a floating `@rc` install tag replaced with an exact-RC pin read
+  from `.claude/rules/*.md` (the version-pin SSOT — never hardcoded in skill bodies).
+
+**Process correction:** two "AUDIT CANDIDATE" findings from an earlier automated ecosystem-
+research pass (AWS Responsible AI Lens dimension count, Claude Code `PostCompact` hook
+context-injection capability) were independently re-verified against live official docs and
+confirmed **false positives** — the existing skill content was already correct and was left
+unchanged.
+
+### Fixed — `/tc-audit` and `/tc-write-skill` didn't resolve
+
+`.claude/skills/audit/` and `.claude/skills/write-skill/` had `name: tc-audit` /
+`name: tc-write-skill` in frontmatter, but Claude Code resolves project skills by directory
+name, not frontmatter — they actually registered as `/audit` and `/write-skill`. Renamed
+the directories to match every doc's documented invocation.
+
+### Fixed — `templatecentral:migrate` light-adoption dead end
+
+The "light adoption" migrate path wrote a version marker and seeded nothing; Phase 0 then
+read that marker and reported "no migration needed" forever, with no route back to a full
+harness seed. Phase 0's early-exit now also requires `.claude/harness.json` to exist.
+
+---
+
 ## [5.13.0] — 2026-08-05
 
 ### Added

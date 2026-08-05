@@ -37,7 +37,30 @@ rm -rf drizzle/
 
 ### Step 4 — Create `src/database/kysely.service.ts` (IAM variant)
 
+> **Canonical source**: the `KyselyService` block below and the `serviceConfig` block in
+> Step 10 are duplicated verbatim from `add/database/typescript/nestjs-kysely.md` (its
+> "IAM Auth Variant" section) — treat that file as canonical. `scripts/lint-skills.sh`
+> fails the build if the two copies drift, so re-copy rather than hand-editing here.
+
+**Download the AWS RDS CA bundle first.** RDS server certificates chain to the Amazon RDS
+root CA, which is not in Node's default trust store — without the bundle, TLS verification
+fails with `SELF_SIGNED_CERT_IN_CHAIN` and the tempting "fix" (`rejectUnauthorized: false`)
+silently downgrades the connection to unauthenticated TLS.
+
+```bash
+mkdir -p certs
+curl -fsSL -o certs/rds-global-bundle.pem \
+  https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+```
+
+Commit `certs/rds-global-bundle.pem` (it is a public certificate, not a secret) or bake it
+into the Docker image, and add `RDS_CA_BUNDLE_PATH=certs/rds-global-bundle.pem` to `.env`
+and `.env.example`. In a container, `NODE_EXTRA_CA_CERTS=/app/certs/rds-global-bundle.pem`
+is an equivalent process-wide alternative to the explicit `ca` option below.
+
 ```typescript
+import { readFileSync } from 'node:fs';
+
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Kysely, PostgresDialect, sql } from 'kysely';
 import { Signer } from '@aws-sdk/rds-signer';
@@ -63,7 +86,12 @@ export class KyselyService extends Kysely<Database> implements OnModuleInit, OnM
       user: serviceConfig.DATABASE_USER,
       database: serviceConfig.DATABASE_NAME,
       password: () => signer.getAuthToken(),
-      ssl: { rejectUnauthorized: true },
+      // The `ca` is required: without the Amazon RDS root CA, `rejectUnauthorized: true`
+      // cannot build a chain and every connection fails with SELF_SIGNED_CERT_IN_CHAIN.
+      ssl: {
+        rejectUnauthorized: true,
+        ca: readFileSync(serviceConfig.RDS_CA_BUNDLE_PATH, 'utf8'),
+      },
       max: 10,
     });
 
@@ -110,7 +138,7 @@ export class DatabaseModule {}
 
 ```typescript
 import path from 'node:path';
-import { promises as fs } from 'node:fs';
+import { promises as fs, readFileSync } from 'node:fs';
 import { FileMigrationProvider, Migrator, Kysely, PostgresDialect } from 'kysely';
 import { Signer } from '@aws-sdk/rds-signer';
 import { Pool } from 'pg';
@@ -133,7 +161,10 @@ async function migrate() {
         user: serviceConfig.DATABASE_USER,
         database: serviceConfig.DATABASE_NAME,
         password: () => signer.getAuthToken(),
-        ssl: { rejectUnauthorized: true },
+        ssl: {
+          rejectUnauthorized: true,
+          ca: readFileSync(serviceConfig.RDS_CA_BUNDLE_PATH, 'utf8'),
+        },
       }),
     }),
   });
@@ -148,10 +179,26 @@ async function migrate() {
   });
 
   const { results, error } = await migrator.migrateToLatest();
-  // result-handling block: see drizzle-to-kysely.md Step 7
+  results?.forEach((r) => {
+    if (r.status === 'Success') console.log(`Migration "${r.migrationName}" executed successfully`);
+    else if (r.status === 'Error') console.error(`Migration "${r.migrationName}" failed`);
+  });
+
+  if (error) {
+    console.error('Migration failed:', error);
+    await db.destroy();
+    process.exit(1);
+  }
+
+  await db.destroy();
 }
 
-migrate();
+// Without the catch, a rejected promise leaves the exit code at 0 and CI reports a
+// failed migration as a passing step.
+migrate().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
 ```
 
 ### Step 8 — Write first Kysely migration
@@ -184,6 +231,8 @@ export const serviceConfig = {
   DATABASE_PORT: Number(process.env.DATABASE_PORT ?? '5432'),
   DATABASE_USER: process.env.DATABASE_USER!,
   DATABASE_NAME: process.env.DATABASE_NAME!,
+  RDS_CA_BUNDLE_PATH:
+    process.env.RDS_CA_BUNDLE_PATH ?? 'certs/rds-global-bundle.pem',
 };
 ```
 
