@@ -778,7 +778,7 @@ merge convention as `harness-kit.md` Step A):
 ```json
 {
   "matcher": "Bash|Read|Grep|Glob",
-  "hooks": [{ "type": "command", "command": "node .claude/hooks/redact-sensitive-output.cjs" }]
+  "hooks": [{ "type": "command", "command": ["node", ".claude/hooks/redact-sensitive-output.cjs"] }]
 }
 ```
 
@@ -786,7 +786,7 @@ merge convention as `harness-kit.md` Step A):
 ```json
 {
   "matcher": "Bash|Read|Grep|Glob",
-  "hooks": [{ "type": "command", "command": "python3 .claude/hooks/redact_sensitive_output.py" }]
+  "hooks": [{ "type": "command", "command": ["python3", ".claude/hooks/redact_sensitive_output.py"] }]
 }
 ```
 

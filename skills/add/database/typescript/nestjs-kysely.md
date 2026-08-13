@@ -162,19 +162,31 @@ export class KyselyService extends Kysely<Database> implements OnModuleInit, OnM
 }
 ```
 
-> **IAM fields replace `DATABASE_URL`** — remove `DATABASE_URL` from `serviceConfig` when using IAM auth.
+> **IAM fields replace `DATABASE_URL`** — remove `DATABASE_URL` from both `envSchema` and `serviceConfig` when using IAM auth.
 
-Add IAM fields to `serviceConfig` in `src/config/env.config.ts`:
+Add IAM fields to `envSchema` in `src/config/env.config.ts` — validated at import time, so boot fails loudly if a required field is missing instead of surfacing as a runtime `undefined`:
+
+```typescript
+const envSchema = z.object({
+  // ... existing fields ...
+  DATABASE_HOST: z.string().min(1),
+  DATABASE_PORT: z.coerce.number().int().min(1).max(65535).default(5432),
+  DATABASE_USER: z.string().min(1),
+  DATABASE_NAME: z.string().min(1),
+  RDS_CA_BUNDLE_PATH: z.string().min(1).default('certs/rds-global-bundle.pem'),
+});
+```
+
+Then map the validated fields into `serviceConfig`:
 
 ```typescript
 export const serviceConfig = {
   // ... existing fields ...
-  DATABASE_HOST: process.env.DATABASE_HOST!,
-  DATABASE_PORT: Number(process.env.DATABASE_PORT ?? '5432'),
-  DATABASE_USER: process.env.DATABASE_USER!,
-  DATABASE_NAME: process.env.DATABASE_NAME!,
-  RDS_CA_BUNDLE_PATH:
-    process.env.RDS_CA_BUNDLE_PATH ?? 'certs/rds-global-bundle.pem',
+  DATABASE_HOST: env.DATABASE_HOST,
+  DATABASE_PORT: env.DATABASE_PORT,
+  DATABASE_USER: env.DATABASE_USER,
+  DATABASE_NAME: env.DATABASE_NAME,
+  RDS_CA_BUNDLE_PATH: env.RDS_CA_BUNDLE_PATH,
 };
 ```
 
@@ -282,7 +294,10 @@ Create a migration runner at **`src/database/migrate.ts`**:
 ```typescript
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { FileMigrationProvider, Migrator, Kysely, PostgresDialect } from 'kysely';
+import { Kysely, PostgresDialect } from 'kysely';
+// Migration classes live under the kysely/migration subpath — the root export's
+// FileMigrationProvider/Migrator are typed as compile-time redirects to this subpath.
+import { FileMigrationProvider, Migrator } from 'kysely/migration';
 import { Pool } from 'pg';
 
 import { serviceConfig } from '../config/env.config';
@@ -330,12 +345,19 @@ Run migrations with: `pnpm migrate`
 
 #### B7. Configure Environment
 
-Add `DATABASE_URL` to `serviceConfig` in `src/config/env.config.ts`:
+Add `DATABASE_URL` to `envSchema` in `src/config/env.config.ts` — validated at import time, so boot fails loudly if it's missing instead of surfacing as a runtime `undefined`:
+
+```typescript
+const envSchema = z.object({
+  // ... existing fields ...
+  DATABASE_URL: z.string().min(1),
+});
+```
 
 ```typescript
 export const serviceConfig = {
   // ... existing fields ...
-  DATABASE_URL: process.env.DATABASE_URL!,
+  DATABASE_URL: env.DATABASE_URL,
 };
 ```
 

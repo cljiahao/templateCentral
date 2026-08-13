@@ -71,6 +71,10 @@ Centralized in `src/lib/constants/env.ts` — read that file for the authoritati
 - JSDoc on exported functions/components describes the contract (props, return, behavior) — not the implementation.
 - The comment gate is seeded as a hard gate (`error`, not a warning) in `eslint.config.mjs`: `no-inline-comments: 'error'` (with an `ignorePattern` for `eslint-`/`@ts-`/`prettier-`/coverage directives) enforces own-line comments, and `sonarjs/no-commented-code: 'error'` blocks commented-out code. Both fail lint/CI.
 
+### Static Analysis (`eslint-plugin-sonarjs`)
+
+`eslint.config.mjs` extends `sonarjs.configs.recommended` (~217 of the plugin's 280 rules, at `error`) covering bugs, code smells, test hygiene, and React/JSX rules (`jsx-no-leaked-render`, `no-uniq-key`, `prefer-read-only-props`). This is a client-only SPA, so the server-focused security rules (hardcoded secrets, weak crypto, insecure cookies/JWT) stay on but are inert — no server code exists here to trip them. `src/components/ui/**` (generated shadcn primitives) turns off `prefer-read-only-props`, and test files (`src/**/*.{test,spec}.{ts,tsx}`) turn off `no-hardcoded-secrets` / `no-clear-text-protocols` so fake fixtures don't false-positive.
+
 ### Security (Vite + React)
 
 **Environment Variables**

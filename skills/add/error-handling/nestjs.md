@@ -16,6 +16,8 @@ the marker.
 
 **1. Enhanced HTTP Exception Filter**
 
+This replaces the base scaffold's `HttpExceptionFilter` entirely — the response body shape changes from `{ statusCode, message }` to `{ error, details? }`. Update any existing client code, tests, or Swagger consumers written against the base shape; this is not an additive change.
+
 ```ts
 // src/common/filters/http-exception.filter.ts
 import {

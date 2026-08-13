@@ -112,9 +112,6 @@ FUTURE.md
 
 ```dockerfile
 # ---- Global build arguments ----
-# NODE:           Node.js image tag. Uses a floating major tag so patch updates
-#                 are picked up automatically; pin to a digest in CI for
-#                 reproducible builds. Build stages only — prod uses NGINX.
 # NODE_BUILD:     Build-stage Node.js image. Always Alpine (needs shell for
 #                 apk, adduser, etc.). Not overridden by CI.
 # NGINX:          Nginx image for serving the static Vite build output
@@ -123,7 +120,6 @@ FUTURE.md
 # APP_GROUPNAME:  Non-root group name inside the container
 # APP_DIR:        Working directory for all stages
 # PORT:           Port the Nginx server listens on (also used in nginx.conf.template)
-ARG NODE=node:24-alpine
 ARG NODE_BUILD=node:24-alpine
 ARG NGINX=nginx:1.30.2-alpine3.23
 ARG APP_UID=1001
@@ -394,12 +390,16 @@ VITE_API_BASE_URL=http://localhost:8000
 
 ### `eslint.config.mjs`
 
+> `sonarjs.configs.recommended` enables ~217 of the plugin's 280 rules at `error` (bugs, code smell, tests, React/JSX). This is a client-only SPA (no secrets, cookies, or JWTs ever live here per the "NEVER put secrets in `VITE_*`" boundary), so the server-focused security tier is inert here and not called out separately — it stays on for any accidental server-shaped code (e.g. `no-clear-text-protocols`) but nothing is scoped for it. Mixing `sonarjs.configs.recommended` with a separate `plugins: { sonarjs }` block throws `Cannot redefine plugin "sonarjs"`; every block touching sonarjs rules must reuse the same `sonarjsPlugin` reference.
+
 ```mjs
 import js from '@eslint/js';
 import reactHooks from 'eslint-plugin-react-hooks';
 import sonarjs from 'eslint-plugin-sonarjs';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+
+const sonarjsPlugin = sonarjs.configs.recommended.plugins.sonarjs;
 
 export default tseslint.config(
   { ignores: ['dist', '.claude/**'] },
@@ -412,16 +412,34 @@ export default tseslint.config(
     },
     plugins: {
       'react-hooks': reactHooks,
-      sonarjs,
+      ...sonarjs.configs.recommended.plugins,
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      ...sonarjs.configs.recommended.rules,
       // Comment hygiene: own-line comments only, no commented-out code. See templatecentral:standards code-standards/comments.md.
       'no-inline-comments': [
         'error',
-        { ignorePattern: 'eslint-|@ts-|prettier-|c8 |istanbul |webpackChunkName' },
+        { ignorePattern: 'eslint-|@ts-|prettier-|c8 |istanbul ' },
       ],
+      // recommended leaves this off; templateCentral's comment-hygiene gate requires it.
       'sonarjs/no-commented-code': 'error',
+    },
+  },
+  {
+    // shadcn/ui primitives are generated, not hand-edited — prefer-read-only-props
+    // fires on their prop typing and can't be fixed without diverging from `shadcn add` output.
+    files: ['src/components/ui/**/*.tsx'],
+    plugins: { sonarjs: sonarjsPlugin },
+    rules: { 'sonarjs/prefer-read-only-props': 'off' },
+  },
+  {
+    // Test fixtures legitimately use fake secrets and http:// literals to exercise guards.
+    files: ['src/**/*.{test,spec}.{ts,tsx}'],
+    plugins: { sonarjs: sonarjsPlugin },
+    rules: {
+      'sonarjs/no-hardcoded-secrets': 'off',
+      'sonarjs/no-clear-text-protocols': 'off',
     },
   }
 );

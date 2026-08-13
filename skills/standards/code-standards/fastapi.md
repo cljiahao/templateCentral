@@ -59,6 +59,10 @@
 - Docstrings: one-line for simple functions, short paragraph for complex ones; describe the contract (args, returns, behavior), not the implementation.
 - Ruff `ERA` flags commented-out code — keep it enabled in `pyproject.toml`.
 
+### Static Analysis (`ruff`)
+
+`pyproject.toml` pins `[tool.ruff.lint] select` (not `extend-select` — an empty `[tool.ruff]` table already turns on ~400 rules across ~38 categories by default) to a deliberate, per-tier list: bugs (`B`), security (`S` — hardcoded secrets, weak crypto, unsafe eval/exec), FastAPI-specific (`FAST` — e.g. redundant `response_model`), code smells (`SIM`/`C4`/`RET`), test style (`PT`), misc bug-prone patterns (`PIE`), and modernization (`UP`), alongside the existing `E4`/`E7`/`E9`/`F`/`I`/`ERA` baseline. A per-file-ignore turns off `S101`/`S105` (assert-use, "hardcoded password") under `test/**` — pytest's own idioms and fixture literals trip both without being real findings. `PL`, `ANN`, `ARG`, `TRY`, `EM`, and `DTZ` are deliberately not enabled — see the comment above `select` in `pyproject.toml` for why each was deferred.
+
 ### Constants
 
 - Include units when helpful (e.g. `HARD_LIMIT_CENTS`).

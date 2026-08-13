@@ -409,8 +409,7 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<AuthUser | null>(
-    // Dev bypass: in development, skip the API call and use a mock user.
-    // Remove this block before going to production.
+    // Dev bypass — guarded by ENV.IS_DEV; Vite tree-shakes this in production builds. Do not remove the guard.
     ENV.IS_DEV ? DEV_USER : null
   );
   const [isLoading] = useState(false);

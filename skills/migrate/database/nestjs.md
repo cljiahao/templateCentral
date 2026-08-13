@@ -222,17 +222,29 @@ Also update constructor injection: replace `private readonly drizzle: DrizzleSer
 
 ### Step 10 — Update `src/config/env.config.ts`
 
-Replace `DATABASE_URL` with IAM fields:
+Replace `DATABASE_URL` with IAM fields, in both `envSchema` and `serviceConfig`:
+
+```typescript
+const envSchema = z.object({
+  // ... existing fields ...
+  DATABASE_HOST: z.string().min(1),
+  DATABASE_PORT: z.coerce.number().int().min(1).max(65535).default(5432),
+  DATABASE_USER: z.string().min(1),
+  DATABASE_NAME: z.string().min(1),
+  RDS_CA_BUNDLE_PATH: z.string().min(1).default('certs/rds-global-bundle.pem'),
+});
+```
+
+Then map the validated fields into `serviceConfig`:
 
 ```typescript
 export const serviceConfig = {
   // ... existing fields ...
-  DATABASE_HOST: process.env.DATABASE_HOST!,
-  DATABASE_PORT: Number(process.env.DATABASE_PORT ?? '5432'),
-  DATABASE_USER: process.env.DATABASE_USER!,
-  DATABASE_NAME: process.env.DATABASE_NAME!,
-  RDS_CA_BUNDLE_PATH:
-    process.env.RDS_CA_BUNDLE_PATH ?? 'certs/rds-global-bundle.pem',
+  DATABASE_HOST: env.DATABASE_HOST,
+  DATABASE_PORT: env.DATABASE_PORT,
+  DATABASE_USER: env.DATABASE_USER,
+  DATABASE_NAME: env.DATABASE_NAME,
+  RDS_CA_BUNDLE_PATH: env.RDS_CA_BUNDLE_PATH,
 };
 ```
 

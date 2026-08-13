@@ -61,8 +61,8 @@ from fastapi.testclient import TestClient
 from app import app
 
 
-@pytest.fixture()
-def client() -> Generator[TestClient, None, None]:
+@pytest.fixture
+def client() -> Generator[TestClient]:
     """FastAPI test client."""
     with TestClient(app) as client:
         yield client
@@ -73,8 +73,8 @@ Extend it for database tests by overriding dependencies:
 ```python
 # test/conftest.py — add after the existing client fixture
 
-@pytest.fixture()
-def db_client() -> Generator[TestClient, None, None]:
+@pytest.fixture
+def db_client() -> Generator[TestClient]:
     """TestClient with a clean in-memory database for each test."""
     from database.session import get_db
     from sqlalchemy import create_engine

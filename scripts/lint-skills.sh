@@ -872,9 +872,12 @@ PAIRS = [
     ("NestJS IAM KyselyService",
      "add/database/typescript/nestjs-kysely.md", "Replace the entire contents of `kysely.service.ts` with:",
      "migrate/database/nestjs.md", "### Step 4 — Create `src/database/kysely.service.ts` (IAM variant)", "typescript"),
-    ("NestJS IAM serviceConfig fields",
-     "add/database/typescript/nestjs-kysely.md", "Add IAM fields to `serviceConfig`",
+    ("NestJS IAM envSchema fields",
+     "add/database/typescript/nestjs-kysely.md", "Add IAM fields to `envSchema`",
      "migrate/database/nestjs.md", "### Step 10 — Update `src/config/env.config.ts`", "typescript"),
+    ("NestJS IAM serviceConfig mapping",
+     "add/database/typescript/nestjs-kysely.md", "Then map the validated fields into `serviceConfig`",
+     "migrate/database/nestjs.md", "Then map the validated fields into `serviceConfig`", "typescript"),
 ]
 
 def fence_after(path, anchor, lang):
@@ -995,6 +998,25 @@ check_no_toplevel_command_in_hooks() {
     fail "Hook reads bash command from top-level d.command — use d.tool_input.command (or d.get('tool_input',{}).get('command','') in Python)"
   else
     pass "No top-level d.command access in hook commands"
+  fi
+}
+
+check_hook_command_uses_args_array() {
+  # Simple hook commands (single interpreter + script path, no shell metacharacters) should use
+  # the args[] exec form ("command": ["bash", ".claude/hooks/x.sh"]) instead of a shell string
+  # ("command": "bash .claude/hooks/x.sh") — array form invokes via execve() with no shell
+  # interpolation, so it can't be hijacked by injection. Scoped to .claude/hooks/ references only;
+  # every "command": key in skills/ is a hook definition (verified — no unrelated JSON matches).
+  # TIMELESS: args[] exec form has been supported since v2.1.139; this is a security best practice,
+  # not a version-gated feature.
+  header "Hook commands use args[] exec form, not shell strings"
+  local matches
+  matches=$(grep -rn '"command": "[^"]*\.claude/hooks/' "$SKILLS_DIR/" 2>/dev/null || true)
+  if [[ -n "$matches" ]]; then
+    echo "$matches"
+    fail 'Hook command uses a shell string — use array exec form: "command": ["bash", ".claude/hooks/x.sh"]'
+  else
+    pass "All hook commands use args[] exec form"
   fi
 }
 
@@ -1171,6 +1193,7 @@ check_seeded_skills_scope_tools
 check_no_unscoped_bash_grant
 check_seeded_skill_paths_are_directories
 check_no_toplevel_command_in_hooks
+check_hook_command_uses_args_array
 check_scaffold_seeds_complete_harness
 check_migrate_hook_inventory_matches_kit
 check_duplicated_iam_blocks_match

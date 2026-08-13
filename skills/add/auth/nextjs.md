@@ -92,8 +92,8 @@ export const auth = betterAuth({
     enabled: true,
     // SSO only in prod; dev can sign up
     disableSignUp: process.env.NODE_ENV === 'production',
-    // OWASP recommended minimum
-    minPasswordLength: 12,
+    // OWASP: without MFA, treat <15 chars as weak — this config has no MFA enabled
+    minPasswordLength: 15,
     autoSignIn: true,
   },
 
@@ -144,7 +144,22 @@ export const auth = betterAuth({
 
 > `freshAge` is measured from session `createdAt`, not last activity. If you uncomment a short `freshAge` (e.g. 43200 for elevated-assurance flows), users must re-authenticate after that period regardless of activity — this is the intended behavior for high-security flows.
 
-> **Database**: By default, better-auth uses stateless JWE-encrypted cookie sessions — no database required. For production features (session revocation, multi-device logout, audit logs), add a database adapter after running `templatecentral:add` (database). The Drizzle adapter is a separate package (`@better-auth/drizzle-adapter` — install alongside `drizzle-orm`). See [better-auth database docs](https://www.better-auth.com/docs/concepts/database).
+> **Database**: Without a `database` option, better-auth falls back to an in-memory adapter — accounts and sessions live in server process memory only. This is **not** a persistent stateless-cookie mode: everything is lost on every restart/redeploy, and it does not work across multiple instances (serverless, multi-replica deployments). The JWE-encrypted `cookieCache` is only a short-lived (5-minute) read-through cache in front of this store, not a replacement for it. Add a database adapter after running `templatecentral:add` (database) before anything beyond quick local prototyping. The Drizzle adapter is a separate package (`@better-auth/drizzle-adapter` — install alongside `drizzle-orm`). See [better-auth database docs](https://www.better-auth.com/docs/concepts/database).
+
+> **Password hashing**: better-auth's default hasher is scrypt, not argon2id. To use argon2id instead, install `@node-rs/argon2` and override `emailAndPassword.password.hash`/`.verify`:
+> ```ts
+> import { hash, verify, type Options } from '@node-rs/argon2';
+>
+> const opts: Options = { memoryCost: 65536, timeCost: 3, parallelism: 4, outputLen: 32, algorithm: 2 };
+>
+> emailAndPassword: {
+>   // ...other options
+>   password: {
+>     hash: (password) => hash(password, opts),
+>     verify: ({ hash: h, password }) => verify(h, password, opts),
+>   },
+> },
+> ```
 
 #### 3. Write `src/lib/auth-client.ts` (verbatim — do not generate)
 
@@ -395,7 +410,10 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { CustomCard } from '@/components/widgets/custom-card';
 
-const DEV_EMAIL = 'dev@local';
+// better-auth's email validator rejects single-label domains — 'dev@local' fails with
+// INVALID_EMAIL on both sign-in and sign-up. Use a dotted domain.
+const DEV_EMAIL = 'dev@dev.local';
+// eslint-disable-next-line sonarjs/no-hardcoded-passwords -- isDev-gated dev-only login, not a real credential
 const DEV_PASSWORD = 'dev-password-local';
 
 export function LoginCard() {
@@ -409,11 +427,15 @@ export function LoginCard() {
 
     if (error) {
       // First run: account does not exist yet — create it (autoSignIn: true signs in immediately)
-      await authClient.signUp.email({
+      const { error: signUpError } = await authClient.signUp.email({
         email: DEV_EMAIL,
         password: DEV_PASSWORD,
         name: 'Dev User',
       });
+      if (signUpError) {
+        console.error('Dev login failed:', signUpError.message);
+        return;
+      }
     }
 
     router.push(PAGE_ROUTES.DASHBOARD);
@@ -488,7 +510,7 @@ Add under `## Architecture Decisions`:
 - Auth via better-auth with `proxy.ts` route protection (`export async function proxy`); dev bypass with email/password when `isDev`
 - `authClient` (src/lib/auth-client.ts) handles client-side session via `authClient.useSession()` — no SessionProvider needed
 - Route groups: `(public)/` for public pages, `dashboard/` for authenticated pages
-- Sessions: stateless JWE cookies by default; add database adapter (via templatecentral:add (database)) for session revocation
+- Sessions: in-memory (non-persistent, single-instance) by default; add database adapter (via templatecentral:add (database)) before anything beyond local prototyping
 ```
 
 #### 13. Session usage patterns
@@ -619,7 +641,7 @@ For simpler setups without Redis, use `next-rate-limit` with in-memory state (no
 - NEVER expose `BETTER_AUTH_SECRET` in `NEXT_PUBLIC_*` vars — exposed to every browser.
 - Always generate `BETTER_AUTH_SECRET` with `openssl rand -base64 32` — never use a weak or predictable value.
 - **Rate limiting is mandatory for production** — add rate limiting on auth endpoints before going live.
-- **Password hashing**: better-auth handles password hashing internally. For any custom hashing outside better-auth, use argon2id (`argon2` package) — OWASP recommended.
+- **Password hashing**: better-auth's default hasher is scrypt, not argon2id — override `emailAndPassword.password.hash`/`.verify` with `@node-rs/argon2` (see Step 2) to match this project's argon2id-everywhere standard.
 - **Breached-password check**: current password-hygiene guidance recommends rejecting passwords found in known-breach lists at creation/change time, in addition to the length floor — check candidates against a blocklist (e.g. the Have I Been Pwned k-anonymity range API) in the sign-up flow before calling `authClient.signUp.email()`.
 
 ### After Writing Code

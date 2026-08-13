@@ -12,7 +12,7 @@ Requires a project scaffolded with `templatecentral:scaffold`. See Step 0.
 ### Architecture
 
 ```
-ENV → services/ → clients/ → schemas/
+ENV → services/ → { clients/, schemas/ }
 ```
 
 - **clients/** — Thin HTTP clients that extend `FetchClient` from `src/lib/clients/`

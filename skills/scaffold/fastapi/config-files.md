@@ -143,12 +143,12 @@ WORKERS="${WORKERS:-2}"
 case "$MODE" in
   dev)
     echo "Starting FastAPI dev server (uvicorn --reload)..."
-    exec uvicorn app:app --app-dir src --host 0.0.0.0 --port "$PORT" --reload
+    exec uvicorn app:app --app-dir src --host 0.0.0.0 --port "$PORT" --reload --log-config src/core/uvicorn_log_config.json
     ;;
 
   prod)
     echo "Starting FastAPI production server (uvicorn, $WORKERS workers)..."
-    exec uvicorn app:app --app-dir src --host 0.0.0.0 --port "$PORT" --workers "$WORKERS"
+    exec uvicorn app:app --app-dir src --host 0.0.0.0 --port "$PORT" --workers "$WORKERS" --log-config src/core/uvicorn_log_config.json
     ;;
 
   *)
@@ -410,14 +410,30 @@ line-length = 88
 target-version = "py313"
 
 [tool.ruff.lint]
-# E4/E7/E9/F = ruff's historical default set; I = isort; ERA = flag commented-out code (comment
-# hygiene — see templatecentral:standards code-standards/comments.md). Pinned explicitly via
-# `select` (not `extend-select`) because merely having a [tool.ruff] table present makes ruff
-# enable ~400 rules across ~38 categories by default as of ruff 0.15+ — `extend-select` would
-# layer onto that much larger set instead of the intended minimal baseline (verified: an
-# unqualified `extend-select = ["I", "ERA"]` here produces real lint failures on generated
-# scaffold source from categories like PIE/PYI/DTZ/UP that were never meant to be enabled).
-select = ["E4", "E7", "E9", "F", "I", "ERA"]
+# Pinned explicitly via `select` (not `extend-select`) because merely having a [tool.ruff] table
+# present makes ruff enable ~400 rules across ~38 categories by default as of ruff 0.15+ —
+# `extend-select` would layer onto that much larger set instead of this deliberate list.
+# Each category below was verified clean (or fixed to be clean) against the actual generated
+# scaffold source before being added — see templatecentral:standards code-standards for the
+# per-tier rationale. Tiers: E4/E7/E9/F = ruff's historical default set; I = isort; ERA = flag
+# commented-out code (comment hygiene, see code-standards/comments.md); S = flake8-bandit
+# (security — hardcoded secrets, weak crypto, unsafe eval/exec); B = flake8-bugbear (likely
+# bugs); FAST = FastAPI-specific rules (e.g. redundant `response_model`); SIM/C4/RET = code
+# smells (simplifiable branches, comprehensions, redundant returns); PT = pytest style; PIE =
+# misc bug-prone patterns (e.g. dead `pass` after a docstring); UP = pyupgrade (modern syntax).
+# Deliberately deferred (need per-repo tuning or are highly opinionated, not zero-noise): PL
+# (mixes real findings like magic-value-in-assert with stylistic import-placement opinions),
+# ANN (would require retrofitting type annotations project-wide), ARG (false-positives on
+# framework-mandated callback signatures like FastAPI exception handlers), TRY/EM (opinionated
+# exception-message formatting), DTZ (single-rule category, not worth its own tier here).
+select = [
+  "E4", "E7", "E9", "F", "I", "ERA",
+  "S", "B", "FAST", "SIM", "C4", "RET", "PT", "PIE", "UP",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# pytest fixtures/assertions and test doubles are not the bandit findings they look like.
+"test/**/*.py" = ["S101", "S105"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "test"]
@@ -454,7 +470,7 @@ Write this file verbatim (dev-only dependencies; not installed in production Doc
 pytest
 pytest-asyncio
 pytest-cov
-httpx
+httpx2
 ruff
 pyright
 ```

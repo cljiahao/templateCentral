@@ -27,12 +27,19 @@ import { serviceConfig } from '../config/env.config';
 export class DatabaseModule {}
 ```
 
-Add `MONGODB_URL` to `serviceConfig` in `src/config/env.config.ts`:
+Add `MONGODB_URL` to `envSchema` in `src/config/env.config.ts` — validated at import time, so boot fails loudly if it's missing instead of surfacing as a runtime `undefined`:
+
+```typescript
+const envSchema = z.object({
+  // ... existing fields ...
+  MONGODB_URL: z.string().min(1),
+});
+```
 
 ```typescript
 export const serviceConfig = {
   // ... existing fields ...
-  MONGODB_URL: process.env.MONGODB_URL!,
+  MONGODB_URL: env.MONGODB_URL,
 };
 ```
 
@@ -72,13 +79,21 @@ import { serviceConfig } from '../config/env.config';
 export class DatabaseModule {}
 ```
 
-Add IAM fields to `serviceConfig` in `src/config/env.config.ts`:
+Add IAM fields to `envSchema` in `src/config/env.config.ts` — validated at import time, so boot fails loudly if a required field is missing instead of surfacing as a runtime `undefined`:
+
+```typescript
+const envSchema = z.object({
+  // ... existing fields ...
+  MONGODB_HOST: z.string().min(1),
+  MONGODB_DB_NAME: z.string().min(1),
+});
+```
 
 ```typescript
 export const serviceConfig = {
   // ... existing fields ...
-  MONGODB_HOST: process.env.MONGODB_HOST!,
-  MONGODB_DB_NAME: process.env.MONGODB_DB_NAME!,
+  MONGODB_HOST: env.MONGODB_HOST,
+  MONGODB_DB_NAME: env.MONGODB_DB_NAME,
 };
 ```
 

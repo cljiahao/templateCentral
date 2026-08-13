@@ -37,9 +37,9 @@
   "dependencies": {
     "@fastify/helmet": "^13.0.2",
     "@fastify/static": "^9.1.3",
-    "@nestjs/common": "^11.1.27",
-    "@nestjs/core": "^11.1.27",
-    "@nestjs/platform-fastify": "^11.1.27",
+    "@nestjs/common": "^11.1.28",
+    "@nestjs/core": "^11.1.28",
+    "@nestjs/platform-fastify": "^11.1.28",
     "@nestjs/swagger": "^11.4.4",
     "dotenv": "^17.4.2",
     "fastify": "^5.8.5",
@@ -54,7 +54,7 @@
     "@eslint/js": "^9.0.0",
     "@nestjs/cli": "^11.0.21",
     "@nestjs/schematics": "^11.1.0",
-    "@nestjs/testing": "^11.1.27",
+    "@nestjs/testing": "^11.1.28",
     "@types/node": "^24",
     "@vitest/coverage-v8": "^4.1.8",
     "eslint": "^9.0.0",
@@ -460,7 +460,7 @@ PORT=3000
 # CORS
 CLIENT_URL=http://localhost:3000
 
-# Reverse proxy trust — set to VPC CIDR (e.g. 10.0.0.0/8) or * when behind ALB → Traefik; leave empty for local dev
+# Reverse proxy trust — 1 = one-hop (ALB → App), 2 = two-hop (ALB → Traefik → App), a VPC CIDR (e.g. 10.0.0.0/8), or * to trust all; leave empty for local dev
 TRUST_PROXY=
 ```
 
@@ -484,12 +484,10 @@ blockExoticSubdeps: true
 
 # Explicitly allowlist packages permitted to run install-time build scripts.
 # pnpm 11 blocks all install scripts by default; add native packages here as needed.
-# Run `templatecentral:add (auth)` — it adds argon2 and will prompt you to uncomment this.
-# allowBuilds:
-#   argon2: true   # required after `templatecentral:add (auth)`
 allowBuilds:
   '@scarf/scarf': false
   lefthook: false      # git-hook installer; binary ships via optional deps — no build needed, but pnpm 11 still requires an explicit decision or it blocks `pnpm <script>` runs
+  # argon2: true        # uncomment when running `templatecentral:add (auth)` — argon2 is a native Node addon
 ```
 
 > **Note:** if `pnpm install` reports `ERR_PNPM_IGNORED_BUILDS` or rewrites `pnpm-workspace.yaml` with unexpected entries, set each listed package under `allowBuilds` to `true` or `false` as appropriate and re-run `pnpm install`.
@@ -525,6 +523,8 @@ lefthook.yml
 
 ### `eslint.config.mjs`
 
+> `sonarjs.configs.recommended` enables ~206 of the plugin's 268 rules at `error` (bugs, security, code smell, tests). Mixing it with a separate `plugins: { sonarjs }` block throws `Cannot redefine plugin "sonarjs"`; every block touching sonarjs rules must reuse the same `sonarjsPlugin` reference. `eslint-plugin-sonarjs` is pinned exact (`4.1.0`, no caret) below — `configs.recommended`'s enabled-rule set is not stable across minor versions (4.2.0 enables ~217 of 280 rules, a different set); bump deliberately and re-verify, don't let `pnpm install` silently resolve a newer minor.
+
 ```js
 // @ts-check
 import eslint from '@eslint/js';
@@ -532,6 +532,8 @@ import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended'
 import sonarjs from 'eslint-plugin-sonarjs';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+
+const sonarjsPlugin = sonarjs.configs.recommended.plugins.sonarjs;
 
 export default tseslint.config(
   {
@@ -553,18 +555,34 @@ export default tseslint.config(
     },
   },
   {
-    plugins: { sonarjs },
+    ...sonarjs.configs.recommended,
     rules: {
+      ...sonarjs.configs.recommended.rules,
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
       '@typescript-eslint/no-unsafe-call': 'off',
+      // Honour the `_`-prefix convention for intentionally-unused args/vars.
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+      ],
       // Comment hygiene: own-line comments only, no commented-out code. See templatecentral:standards code-standards/comments.md.
       'no-inline-comments': [
         'error',
-        { ignorePattern: 'eslint-|@ts-|prettier-|c8 |istanbul |webpackChunkName' },
+        { ignorePattern: 'eslint-|@ts-|prettier-|c8 |istanbul ' },
       ],
+      // recommended leaves this off; templateCentral's comment-hygiene gate requires it.
       'sonarjs/no-commented-code': 'error',
+    },
+  },
+  {
+    // Test fixtures legitimately use fake secrets and http:// literals to exercise guards.
+    files: ['test/**/*.{spec,test}.ts', 'src/**/*.spec.ts', 'test/**/*.e2e-spec.ts'],
+    plugins: { sonarjs: sonarjsPlugin },
+    rules: {
+      'sonarjs/no-hardcoded-secrets': 'off',
+      'sonarjs/no-clear-text-protocols': 'off',
     },
   },
 );

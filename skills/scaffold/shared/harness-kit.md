@@ -48,51 +48,51 @@ Create `.claude/settings.json` at the project root, plus the `.claude/hooks/` sc
     "PreToolUse": [
       {
         "matcher": "Edit|Write",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/protect-files.sh" }]
+        "hooks": [{ "type": "command", "command": ["bash", ".claude/hooks/protect-files.sh"] }]
       },
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/block-no-verify.sh" }]
+        "hooks": [{ "type": "command", "command": ["bash", ".claude/hooks/block-no-verify.sh"] }]
       }
     ],
     "UserPromptSubmit": [
       {
-        "hooks": [{ "type": "command", "command": "node .claude/hooks/user-prompt-guard.cjs" }]
+        "hooks": [{ "type": "command", "command": ["node", ".claude/hooks/user-prompt-guard.cjs"] }]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/post-edit-typecheck.sh" }]
+        "hooks": [{ "type": "command", "command": ["bash", ".claude/hooks/post-edit-typecheck.sh"] }]
       },
       {
         "matcher": "Edit|Write",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/post-edit-comment-check.sh" }]
+        "hooks": [{ "type": "command", "command": ["bash", ".claude/hooks/post-edit-comment-check.sh"] }]
       },
       {
         "matcher": "Skill__.*",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/skill-usage-log.sh" }]
+        "hooks": [{ "type": "command", "command": ["bash", ".claude/hooks/skill-usage-log.sh"] }]
       }
     ],
     "PostToolUseFailure": [
       {
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/post-tool-failure.sh" }]
+        "hooks": [{ "type": "command", "command": ["bash", ".claude/hooks/post-tool-failure.sh"] }]
       }
     ],
     "Stop": [
       {
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/stop-checks.sh" }]
+        "hooks": [{ "type": "command", "command": ["bash", ".claude/hooks/stop-checks.sh"] }]
       }
     ],
     "SubagentStop": [
       {
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/subagent-stop.sh" }]
+        "hooks": [{ "type": "command", "command": ["bash", ".claude/hooks/subagent-stop.sh"] }]
       }
     ],
     "SessionStart": [
       {
         "matcher": "startup|resume|clear|compact",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/session-context.sh" }]
+        "hooks": [{ "type": "command", "command": ["bash", ".claude/hooks/session-context.sh"] }]
       }
     ]
   },
@@ -116,51 +116,51 @@ Create `.claude/settings.json` at the project root, plus the `.claude/hooks/` sc
     "PreToolUse": [
       {
         "matcher": "Edit|Write",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/protect-files.sh" }]
+        "hooks": [{ "type": "command", "command": ["bash", ".claude/hooks/protect-files.sh"] }]
       },
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/block-no-verify.sh" }]
+        "hooks": [{ "type": "command", "command": ["bash", ".claude/hooks/block-no-verify.sh"] }]
       }
     ],
     "UserPromptSubmit": [
       {
-        "hooks": [{ "type": "command", "command": "python3 .claude/hooks/user-prompt-guard.py" }]
+        "hooks": [{ "type": "command", "command": ["python3", ".claude/hooks/user-prompt-guard.py"] }]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/post-edit-typecheck.sh" }]
+        "hooks": [{ "type": "command", "command": ["bash", ".claude/hooks/post-edit-typecheck.sh"] }]
       },
       {
         "matcher": "Edit|Write",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/post-edit-comment-check.sh" }]
+        "hooks": [{ "type": "command", "command": ["bash", ".claude/hooks/post-edit-comment-check.sh"] }]
       },
       {
         "matcher": "Skill__.*",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/skill-usage-log.sh" }]
+        "hooks": [{ "type": "command", "command": ["bash", ".claude/hooks/skill-usage-log.sh"] }]
       }
     ],
     "PostToolUseFailure": [
       {
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/post-tool-failure.sh" }]
+        "hooks": [{ "type": "command", "command": ["bash", ".claude/hooks/post-tool-failure.sh"] }]
       }
     ],
     "Stop": [
       {
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/stop-checks.sh" }]
+        "hooks": [{ "type": "command", "command": ["bash", ".claude/hooks/stop-checks.sh"] }]
       }
     ],
     "SubagentStop": [
       {
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/subagent-stop.sh" }]
+        "hooks": [{ "type": "command", "command": ["bash", ".claude/hooks/subagent-stop.sh"] }]
       }
     ],
     "SessionStart": [
       {
         "matcher": "startup|resume|clear|compact",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/session-context.sh" }]
+        "hooks": [{ "type": "command", "command": ["bash", ".claude/hooks/session-context.sh"] }]
       }
     ]
   },
@@ -189,7 +189,7 @@ Hook logic lives in `.claude/hooks/` scripts (seeded below) so complex guards st
 - `post-tool-failure.sh` (PostToolUseFailure) — surfaces tool error context for self-correction.
 - `stop-checks.sh` (Stop) — runs the test suite; exit 2 forces a fix before the turn ends. See delta table for test command.
 - `subagent-stop.sh` (SubagentStop) — type-gates a subagent's uncommitted changes so it can't hand back broken code.
-- `session-context.sh` (SessionStart: startup/resume/clear/compact) — re-injects AGENTS.md routing context + universal invariants. This is the working post-compaction recovery path; PostCompact is observability-only and cannot inject context, so it is not used.
+- `session-context.sh` (SessionStart: startup/resume/clear/compact) — re-injects AGENTS.md routing context + universal invariants. PostCompact fires after compaction and its stdout is injected as context too — both PostCompact and SessionStart(source: compact) are valid re-injection mechanisms, but SessionStart also covers session resume and startup, so it stays the single seeded path here.
 - `skillListingBudgetFraction` — caps skill-listing context overhead at 2 % of the budget.
 
 ---
@@ -1471,7 +1471,7 @@ sha256_regenh=$(shasum -a 256 .claude/regen-harness.sh | cut -d' ' -f1)
 **`.claude/harness.json`** (substitute stack name, verify-skill path, and computed hashes):
 ```json
 {
-  "templatecentral_version": "5.14.0",
+  "templatecentral_version": "5.15.0",
   "stack": "<stack>",
   "seeded_at": "<ISO-date>",
   "seeded_files": {
@@ -1595,7 +1595,7 @@ claude plugin install superpowers
 
 ```markdown
 ## AI Harness
-PreToolUse: blocks secrets and CI pipeline files only (exit 2): `.env*` (except `.env.example`), CI/CD definitions (`.github/workflows/`, `.github/actions/`, `.azuredevops/`, `azure-pipelines*.y[a]ml`, `.gitlab-ci.yml`, `Jenkinsfile`), cert files (`.pem`/`.key`/`.secret`), `credentials.json`/`.netrc`; a second Bash guard blocks `--no-verify`, hook-layer bypasses (`LEFTHOOK=0`, `git -c core.hooksPath=…`), and force-pushes to protected branches. Skills, specs, and all app code are unrestricted. SessionStart (startup/resume/clear/compact): re-injects AGENTS.md routing context + universal invariants so they survive compaction (PostCompact is observability-only and cannot inject).
+PreToolUse: blocks secrets and CI pipeline files only (exit 2): `.env*` (except `.env.example`), CI/CD definitions (`.github/workflows/`, `.github/actions/`, `.azuredevops/`, `azure-pipelines*.y[a]ml`, `.gitlab-ci.yml`, `Jenkinsfile`), cert files (`.pem`/`.key`/`.secret`), `credentials.json`/`.netrc`; a second Bash guard blocks `--no-verify`, hook-layer bypasses (`LEFTHOOK=0`, `git -c core.hooksPath=…`), and force-pushes to protected branches. Skills, specs, and all app code are unrestricted. SessionStart (startup/resume/clear/compact): re-injects AGENTS.md routing context + universal invariants so they survive compaction (PostCompact stdout is also injected as context and fires after compaction, but SessionStart additionally covers resume/startup, so it's the seeded mechanism here).
 UserPromptSubmit: pattern-checks incoming prompts for injection phrases; exit 2 blocks the prompt.
 PostToolUse: incremental type-check (see delta table for stack command) and a comment-hygiene scan (change-narration comments, oversized comment blocks — patterns from `.claude/comment-hygiene-patterns.txt`) after every Edit/Write. Both feedback-only.
 Stop hook: runs full test suite; exit 2 feeds failures to Claude via stderr; exit 0 on pass.

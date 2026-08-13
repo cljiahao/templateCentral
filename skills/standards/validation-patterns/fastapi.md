@@ -32,19 +32,14 @@ class CreateProjectRequest(BaseRequestSchema):
 # src/api/schemas/response/project.py
 from datetime import datetime
 
-from pydantic import BaseModel
+from api.schemas.base import BaseResponseSchema
 
 
-class ProjectResponse(BaseModel):
-    # Use BaseModel for responses that go to same-stack Python consumers.
-    # Use BaseResponseSchema (from api.schemas.base) when the response goes to a
-    # JavaScript frontend — BaseResponseSchema enables camelCase serialization.
+class ProjectResponse(BaseResponseSchema):
     id: str
     name: str
     description: str | None
     created_at: datetime
-
-    model_config = {"from_attributes": True}
 ```
 
 ```python
@@ -180,11 +175,13 @@ async def login(req: Annotated[LoginRequest, Form()]):
 ```python
 # src/integrations/github_service.py
 import httpx
-from pydantic import BaseModel, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 from core.exceptions import InvalidInputError
 
 class GitHubUser(BaseModel):
+    model_config = ConfigDict(extra="ignore")  # external API shape — don't inherit BaseResponseSchema
+
     id: int | str
     login: str
     email: str | None = None

@@ -63,7 +63,7 @@ export interface PaginatedResponse<T> {
 
 ```ts
 // src/lib/pagination/pagination-service.ts
-import { PaginationMetadata } from '@/lib/types/pagination';
+import type { PaginationMetadata } from '@/lib/types/pagination';
 
 // Pages are 1-indexed in the API surface, 0-indexed at the query layer
 export function calculateOffset(page: number, limit: number): number {

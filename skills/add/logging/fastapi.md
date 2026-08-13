@@ -93,21 +93,28 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan, ...)
 ```
 
+`user_id` is `None` until authentication is wired — after `templatecentral:add` (auth), have `get_current_user` set `request.state.user_id = user_id` as a side effect before returning. `log_requests` reads `request.state` only after `await call_next(request)` completes (which runs the full dependency chain), so it picks up the value automatically with no other change needed.
+
 Unhandled exceptions are already logged via the `Exception` handler in `src/error_handler.py` (`logger.exception`). No extra wiring for Tier 1.
 
 #### Tier 2 — Standard (+ Tier 1)
 
-**Auth events** — log inside auth routers in `src/api/routers/`:
+**Auth events** — log inside `src/api/routers/auth.py`, against the actual routes and return types from `templatecentral:add` (auth) — `get_current_user` returns the bare user-id string (subject), not a `User` object, until a database-backed user model exists:
 
 ```python
 # src/api/routers/auth.py
+from fastapi import HTTPException, Request
+
+from api.schemas.response.auth import TokenResponse
 from core.logging import logger
+from core.security import decode_access_token
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(credentials: LoginRequest, request: Request):
-    user = await authenticate(credentials)
-    if not user:
+async def login(body: LoginRequest, request: Request) -> TokenResponse:
+    try:
+        token = login_user(body.email, body.password)
+    except HTTPException:
         logger.warning(
             "Login failure",
             reason="invalid_credentials",
@@ -118,43 +125,34 @@ async def login(credentials: LoginRequest, request: Request):
             # request.client is None on some ASGI transports — guard it, or this
             # failure path raises AttributeError inside the failure path itself.
             ip=request.client.host if request.client else None,
-            # Never log: credentials.password
+            # Never log: body.password
         )
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise
 
-    logger.info("Login success", user_id=str(user.id), method="password")
-    return create_token_response(user)
-
-
-@router.post("/logout", response_model=dict[str, str])
-async def logout(current_user: User = Depends(get_current_user)):
-    logger.info("Logout", user_id=str(current_user.id))
-    return {"status": "ok"}
-
-
-@router.post("/token/refresh", response_model=TokenResponse)
-async def refresh(current_user: User = Depends(get_current_user)):
-    logger.info("Token refresh", user_id=str(current_user.id))
-    return create_token_response(current_user)
+    logger.info("Login success", user_id=decode_access_token(token), method="password")
+    return TokenResponse(access_token=token)
 ```
 
-Access denied — log in your auth dependency:
+Add the equivalent `try`/`except` + `logger.info`/`logger.warning` pair to `/auth/register` and any other auth endpoint you add (e.g. logout, token refresh) once it exists — none of those beyond `/login` and `/register` are part of the base `add (auth)` skill.
+
+Access denied — log in your auth dependency once you've added role-based access control (roles are illustrative here; the base `get_current_user` has no concept of roles until you add a database-backed user model):
 
 ```python
-# src/api/dependencies/auth.py  (dependency used by protected routes)
+# src/api/dependencies/auth.py  (example — adapt once you have a User model with roles)
 from core.logging import logger
 
 
-async def require_role(required_role: str, request: Request, current_user: User = Depends(get_current_user)):
-    if required_role not in current_user.roles:
+async def require_role(required_role: str, request: Request, user_id: str = Depends(get_current_user)):
+    user = await get_user_with_roles(user_id)  # your own lookup, once a database is wired
+    if required_role not in user.roles:
         logger.warning(
             "Access denied",
-            user_id=str(current_user.id),
+            user_id=user_id,
             path=request.url.path,
             required_role=required_role,
         )
         raise HTTPException(status_code=404, detail="Not found")
-    return current_user
+    return user
 ```
 
 **Outbound HTTP calls** — create a wrapper in `src/utils/http_client.py`:

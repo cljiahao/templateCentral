@@ -13,18 +13,20 @@ Requires a project scaffolded with `templatecentral:scaffold`. See Step 0.
 
 ### Dependencies
 
-`argon2` is a native Node addon — pnpm blocks native builds by default. Before installing, add the following to `pnpm-workspace.yaml` in the project root (create the file if it doesn't exist):
+`argon2` is a native Node addon — pnpm blocks native builds by default. Before installing, uncomment the `# argon2: true` line already present under `allowBuilds:` in `pnpm-workspace.yaml` (do not add a second top-level `allowBuilds:` key — YAML silently drops earlier duplicate keys, which would remove the existing `lefthook`/`@scarf/scarf` entries):
 
 ```yaml
 allowBuilds:
+  '@scarf/scarf': false
+  lefthook: false
   argon2: true
 ```
 
 Then install:
 
 ```bash
-pnpm add @nestjs/passport @nestjs/jwt passport passport-jwt argon2
-pnpm add -D @types/passport-jwt
+pnpm add @nestjs/passport @nestjs/jwt passport passport-jwt argon2 ms
+pnpm add -D @types/passport-jwt @types/ms
 ```
 
 ### Steps
@@ -82,13 +84,21 @@ export class TokenDto extends createZodDto(tokenSchema) {}
 
 #### 3. Add Config
 
-Add `JWT_SECRET` to `appConfig` in **`src/config/env.config.ts`**:
+Add `JWT_SECRET` and `JWT_EXPIRES_IN` to `envSchema` in **`src/config/env.config.ts`** — validated at import time, so a missing/short secret fails boot loudly instead of surfacing as a runtime `undefined`:
+
+```typescript
+const envSchema = z.object({
+  // ... existing fields ...
+  JWT_SECRET: z.string().min(32),
+  JWT_EXPIRES_IN: z.string().default('30m'),
+});
+```
 
 ```typescript
 export const appConfig = {
   // ... existing fields ...
-  JWT_SECRET: process.env.JWT_SECRET!,
-  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '30m',
+  JWT_SECRET: env.JWT_SECRET,
+  JWT_EXPIRES_IN: env.JWT_EXPIRES_IN,
 };
 ```
 
@@ -104,17 +114,6 @@ Document in `.env.example`:
 ```
 JWT_SECRET=<generate with: openssl rand -hex 32>
 JWT_EXPIRES_IN=30m
-```
-
-**Add a startup guard in `src/main.ts`** — the `!` assertion is erased at compile time and does NOT throw at runtime if the variable is missing:
-
-```typescript
-async function bootstrap() {
-  if (!appConfig.JWT_SECRET) {
-    throw new Error('JWT_SECRET environment variable is required');
-  }
-  // ... rest of bootstrap
-}
 ```
 
 NEVER use a fallback like `?? ''` or `|| 'change-me'` for secrets.
@@ -239,6 +238,11 @@ export class AuthController {
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+// ms's published `latest` is still 2.x (CommonJS `export =`, default import under
+// esModuleInterop); `StringValue` is backported onto it by @types/ms as a namespace member,
+// not a named export — `import { ms, ... }` does not resolve. @types/ms must be an explicit
+// devDependency: pnpm's strict node_modules won't expose a transitive-only @types package to tsc.
+import ms, { type StringValue } from 'ms';
 
 import { appConfig } from '../../config/env.config';
 import { AuthController } from './auth.controller';
@@ -250,7 +254,12 @@ import { JwtStrategy } from './jwt.strategy';
     PassportModule,
     JwtModule.register({
       secret: appConfig.JWT_SECRET,
-      signOptions: { expiresIn: appConfig.JWT_EXPIRES_IN },
+      // @nestjs/jwt's expiresIn accepts a number of seconds or `ms`'s branded StringValue —
+      // not a plain string, which is what a Zod-validated env var actually is. Cast once here
+      // and convert to seconds so the .env stays human-readable ("30m").
+      signOptions: {
+        expiresIn: Math.floor(ms(appConfig.JWT_EXPIRES_IN as StringValue) / 1000),
+      },
     }),
   ],
   controllers: [AuthController],
