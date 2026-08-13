@@ -166,6 +166,18 @@ const eventSchema = z.discriminatedUnion('type', [
 ]);
 ```
 
+### Field-level error formatting
+
+```ts
+const result = schema.safeParse(input);
+if (!result.success) {
+  const { fieldErrors } = z.flattenError(result.error);
+  return { errors: fieldErrors }; // { fieldName: ["message"] } — map straight to form fields
+}
+```
+
+`z.flattenError()` is the current top-level Zod v4 API — the old `error.flatten` instance method is deprecated.
+
 ## Rules
 
 1. **All user input must be validated** — Forms (client + server), API body, query params, path params, file uploads

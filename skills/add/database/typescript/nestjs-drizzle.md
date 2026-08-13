@@ -146,12 +146,19 @@ export class AppModule {}
 
 #### A8. Configure Environment
 
-Add `DATABASE_URL` to `serviceConfig` in `src/config/env.config.ts`:
+Add `DATABASE_URL` to `envSchema` in `src/config/env.config.ts` — validated at import time, so boot fails loudly if it's missing instead of surfacing as a runtime `undefined`:
+
+```typescript
+const envSchema = z.object({
+  // ... existing fields ...
+  DATABASE_URL: z.string().min(1),
+});
+```
 
 ```typescript
 export const serviceConfig = {
   // ... existing fields ...
-  DATABASE_URL: process.env.DATABASE_URL!,
+  DATABASE_URL: env.DATABASE_URL,
 };
 ```
 
@@ -159,17 +166,6 @@ Add to `.env` and `.env.example`:
 
 ```env
 DATABASE_URL="postgresql://DBUSER:DBPASSWORD@localhost:5432/DBNAME"
-```
-
-**Add a startup guard in `src/main.ts`** — the `!` assertion is erased at compile time and does NOT throw at runtime if the variable is missing:
-
-```typescript
-async function bootstrap() {
-  if (!serviceConfig.DATABASE_URL) {
-    throw new Error('DATABASE_URL environment variable is required');
-  }
-  // ... rest of bootstrap
-}
 ```
 
 #### A9. Generate & Run Migrations

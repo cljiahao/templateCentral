@@ -10,6 +10,218 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [5.15.0] — 2026-08-13
+
+### Added — static-analysis coverage (all four stacks)
+
+`eslint-plugin-sonarjs` was installed in all three JS/TS scaffolds but only one rule
+(`no-commented-code`) was ever wired up. FastAPI's Ruff `select` was similarly minimal
+(`E4,E7,E9,F,I,ERA`). Both expanded to the plugins' real rule catalogs, verified empirically
+(not from memory) against the actual generated scaffold source before enabling anything.
+
+- **NestJS, Next.js, Vite+React**: `eslint.config.mjs` now extends `sonarjs.configs.recommended`
+  (~206 of 268 rules at `error` for the `4.1.0`-pinned nestjs/nextjs stacks; ~217 of 280 for
+  vite-react's `4.2.0`) instead of one hand-picked rule — bugs, hardcoded-secret/weak-crypto/
+  insecure-JWT-and-cookie security rules, code smells, test hygiene, and React/JSX rules. Two
+  scoped overrides: `src/components/ui/**` (generated shadcn primitives) turns off
+  `prefer-read-only-props`; test files turn off `no-hardcoded-secrets`/`no-clear-text-protocols`
+  so fake fixtures don't false-positive. Discovered and fixed the real footgun: mixing
+  `sonarjs.configs.recommended` with a separate `plugins: { sonarjs }` block throws `Cannot
+  redefine plugin "sonarjs"` — every block touching sonarjs rules now reuses one shared plugin
+  reference.
+- **FastAPI**: `pyproject.toml` `[tool.ruff.lint] select` gains `S` (bandit security), `B`
+  (bugbear), `FAST` (FastAPI-specific — e.g. redundant `response_model`), `SIM`/`C4`/`RET`
+  (code smells), `PT` (pytest style), `PIE`, `UP`. A per-file-ignore turns off `S101`/`S105`
+  under `test/**` (assert-use and fixture literals aren't real findings). `PL`, `ANN`, `ARG`,
+  `TRY`, `EM`, `DTZ` deliberately deferred — each mixes real findings with noise or needs
+  per-repo tuning; documented in the `select` comment.
+- Verification method: extracted the actual generated source from `source-files.md`/
+  `config-files.md` for all four stacks into real project layouts, ran `pnpm install`/`pip`
+  installs at the pinned versions, and ran the exact commands each scaffold's completion gate
+  runs (`prettier`, `eslint`, `tsc --noEmit`, the Next.js route-logging script, `ruff check`).
+  Fixed every real finding surfaced: 3 redundant `response_model=` args, 5 dead `pass`
+  statements, a verbose `Generator[X, None, None]` typing, an un-parenthesized-vs-parenthesized
+  `@pytest.fixture()` drift (FastAPI); one pre-existing nested ternary in NestJS's `main.ts`
+  that the newly-enabled `sonarjs/no-nested-conditional` rule caught — extracted into a
+  `resolveTrustProxy()` helper, which also incidentally fixed a `sonarjs/function-return-type`
+  finding along the way.
+
+### Fixed — full-repo audit (all four stacks + cross-stack harness)
+
+Five parallel static reviews (every skill file read in full against accuracy/security/quality
+checklists, against a fresh 2026-08-01 ecosystem research scan) surfaced 4 HIGH and ~15 MEDIUM
+findings across 65 files. One flagged item (AWS Responsible AI Lens "10 dimensions") was
+independently re-verified against the live AWS doc and found to be **correct** — the research
+cache had conflated it with a different lens's "8 core dimensions" preamble; the cache itself
+was corrected so it isn't re-flagged.
+
+**HIGH:**
+- `skills/scaffold/shared/harness-kit.md` + `.claude/skills/tc-audit/implementation.md`: 5
+  locations claimed "PostCompact is observability-only and cannot inject context" — no longer
+  accurate. PostCompact's stdout is injected as context after compaction; `SessionStart` stays
+  the seeded mechanism because it additionally covers resume/startup, not because PostCompact
+  is incapable. This claim also shipped into every scaffolded project's own `AGENTS.md`
+  template — fixed there too.
+- `skills/add/auth/nestjs.md`: told users to append a *second* top-level `allowBuilds:` key to
+  `pnpm-workspace.yaml` instead of uncommenting the stub the scaffold already left for exactly
+  that purpose. Duplicate YAML keys silently drop the earlier `lefthook`/`@scarf/scarf` entries.
+  Fixed both the scaffold's stub (moved inside the real block, commented) and the instruction.
+- `skills/add/auth/vite-react.md`: Steps 3–4 dropped `export` from `DEV_USER` and dropped its
+  import in `login-card.tsx` — applied together, the example doesn't compile.
+- `skills/scaffold/vite-react/source-files.md`: the base scaffold's own dev-bypass comment told
+  readers to "remove this block before going to production," directly contradicting the
+  `add (auth)` skill's explicit rule that the `ENV.IS_DEV` guard must never be removed.
+
+**MEDIUM (highlights — see individual diffs for the full list):**
+- NestJS: `TRUST_PROXY`/`LOG_LEVEL` were read via bare `process.env.X` in `main.ts`/
+  `app.module.ts`, and `JWT_SECRET`/`DATABASE_URL`(×2)/`MONGODB_URL`/`GITHUB_TOKEN` were added
+  via `process.env.X!` + a hand-rolled startup guard across 5 different `add`/`database` skills
+  — all contradicting the scaffold's own documented SSOT ("prefer adding the field to
+  `envSchema`… over a bare `process.env.X!`"). All 6 env vars now flow through `envSchema`
+  (validated at Zod-parse/module-import time, before Nest's DI container even exists); the
+  hand-rolled guards are gone since the schema throws first. Verified live: booting with an
+  invalid `LOG_LEVEL` now fails loudly with a Zod validation error instead of silently falling
+  through, and a normal boot with `TRUST_PROXY=` unset correctly resolves to no proxy trust.
+- NestJS: a file-upload handler in `standards/validation-patterns/nestjs.md` didn't catch the
+  exception Fastify's `toBuffer()` throws on an oversized file — that's a plain `Error`, not an
+  `HttpException`, so it bypassed `HttpExceptionFilter` and fell through as an unformatted 500,
+  contradicting the project's own documented error-handling contract. Now converted to
+  `PayloadTooLargeException` at the boundary.
+- FastAPI: a logging example's auth events referenced a `User` object with `.roles` and an
+  undefined `create_token_response()` helper — the real `get_current_user()` returns a bare
+  `str`, and neither helper nor a `/logout`/`/token/refresh` route exists in the base `add
+  (auth)` skill. Rewritten against the actual contract; a dead `request.state.user_id` read
+  (nothing ever sets it) now documents the one-line wiring needed once auth is added.
+- FastAPI: `validation-patterns/fastapi.md` suggested plain `BaseModel` for responses to
+  "same-stack Python consumers" vs `BaseResponseSchema` for JS frontends — a distinction that
+  doesn't exist anywhere else in the skill set (every frontend this repo scaffolds is JS) and
+  risked skipping camelCase serialization. Standardized on `BaseResponseSchema`.
+- Next.js: `minPasswordLength: 12` cited as "OWASP recommended minimum" — current OWASP
+  guidance treats <15 chars as weak without MFA (this config has no MFA). Bumped to 15.
+  better-auth's actual default hasher is scrypt, not argon2id, despite the skill implying
+  otherwise — documented the real default and the `@node-rs/argon2` override.
+  A page-level error boundary used `console.error` instead of `logError()`, bypassing the
+  project's redaction-aware log pipeline.
+  Version floor bumped `next`/`eslint-config-next` `^16.2.11` → `^16.2.12`;
+  `@nestjs/platform-fastify` (and siblings) `^11.1.27` → `^11.1.28` — current per the
+  ecosystem research scan, no new advisory beyond what was already addressed.
+- Vite+React: a `visibilitychange` listener was attached to `window` instead of `document` —
+  per spec the event fires on `document` and doesn't bubble, so the tab-hide log-flush path
+  silently never ran. An architecture diagram in `add/integration/vite-react.md` implied
+  `clients/` depends on `schemas/`, backwards from the actual code and the file's own text.
+  Both Dockerfiles (nestjs, nextjs) were nearly broken by an over-eager first pass at removing
+  a "dead" `ARG NODE` — turned out both have a real `FROM ${NODE} AS prod` stage (vite-react's
+  prod stage runs NGINX, not Node, so its `ARG NODE` genuinely was dead and stayed removed).
+  Caught before landing by re-deriving `FROM` usage with a corrected grep rather than trusting
+  the first (buggy) one.
+- `skills/add/ai-security/implementation.md`: AWS Responsible AI Lens dimension count
+  re-verified as correct (see above) — no change needed, despite being flagged.
+
+### Changed — audit infrastructure
+
+- `scripts/lint-skills.sh`: new `check_hook_command_uses_args_array` — every `.claude/hooks/`
+  hook command across `skills/` now uses the `args[]` exec form (`["bash", ".claude/hooks/
+  x.sh"]`) instead of a shell string, closing a gap the audit skill itself already required
+  (`tc-audit/implementation.md`'s own Step 3H checklist) but the harness kit's own hook
+  definitions didn't follow — 20 occurrences in `scaffold/shared/harness-kit.md` plus 2 more in
+  `add/redaction/implementation.md`, a file that turned out to be missing from `tc-audit`'s own
+  Step 2 file inventory entirely. Added it to the inventory so it's covered going forward.
+
+### Fixed — IDE-preview-breaking security headers + deep empirical resweep (all four stacks)
+
+Investigated a report that scaffolded Next.js projects disable IDE-embedded preview panes.
+Root cause: `X-Frame-Options: DENY` and CSP `frame-ancestors 'none'` applied unconditionally
+to every route in `next.config.ts`'s `headers()` — which runs during `next dev` too (confirmed
+against live Next.js docs), and browsers enforce both even on localhost, blocking any preview
+mechanism that renders via `<iframe>` (most IDE preview panes do). The same root cause existed
+in NestJS (`@fastify/helmet`, protecting its own `/docs` Swagger UI) and FastAPI
+(`SecurityHeadersMiddleware`, protecting its own `/docs`). Fixed identically in all three: both
+headers now apply only when the environment is not dev, verified live by booting real dev and
+prod servers and curling the actual response headers in each. Vite+React needed no fix — its
+equivalent headers live only in the production `nginx.conf.template`, never touching the Vite
+dev server.
+
+Fixing NestJS surfaced a second bug in the process: `xFrameOptions: { action: 'DENY' }`
+(uppercase) — the installed `@fastify/helmet` type wants lowercase `'deny'`. A first attempt at
+disabling the CSP directive in dev (`[]`) was also wrong — Helmet's own default for an unset
+`frame-ancestors` is `'self'`, which would still block a cross-origin IDE webview; `null` is
+what actually omits the directive. Both caught by reading real compiler/runtime output against
+the actually-installed package versions, not by inspection.
+
+That near-miss motivated a deeper pass: four parallel agents, one per stack, each doing a fresh
+real extraction of the actual generated scaffold source, a real dependency install, a real
+build, and a real dev-server boot with curl checks — then cross-checking every security- or
+correctness-relevant library API surface against installed type definitions or current docs
+rather than assumption. Findings, all fixed and re-verified live:
+
+- **FastAPI**: Swagger UI, ReDoc, and the raw OpenAPI schema were never actually disabled in
+  production (`docs_url`/`redoc_url`/`openapi_url` were never conditioned on `ENVIRONMENT`) —
+  confirmed via `curl` returning 200 with `ENVIRONMENT=prod`. Now `None` outside dev, confirmed
+  404 in prod.
+- **FastAPI**: uvicorn's own startup/access logs silently bypassed the structlog JSON pipeline
+  the code claims unifies them — confirmed by booting in both dev and prod and observing
+  uvicorn's logs stay in its own plain-text format in prod too. Fixed via `log_config=None` in
+  `main.py`'s programmatic path, and a new `src/core/uvicorn_log_config.json` (clears uvicorn's
+  own handlers, re-enables propagation to root) passed via `--log-config` in
+  `docker-entrypoint.sh`'s CLI path, which bypasses `main.py` entirely. Verified live: uvicorn's
+  own log lines now emit as structured JSON through structlog in prod.
+- **FastAPI**: `requirements-dev.txt`'s `httpx` triggers a `StarletteDeprecationWarning` on the
+  installed Starlette version, which now tries `httpx2` first internally — independently
+  confirmed by reading Starlette's own installed `testclient.py` source. Swapped in
+  `requirements-dev.txt` only (the several unrelated `httpx.AsyncClient` outbound-request usages
+  elsewhere are a different, unaffected use of the library).
+- **FastAPI**: `.claude/rules/fastapi.md` listed `asgi-correlation-id` alongside `structlog` as
+  if both ship by default — only `structlog` does; correlation IDs are opt-in via
+  `templatecentral:add (logging)`. Reworded to match this file's own existing convention for
+  other opt-in pieces.
+- **Vite+React**: `add/logging/vite-react.md`'s `Omit<LogEntry, 'timestamp'>` silently lost its
+  required-property check — a `[k: string]: unknown` index signature collapses `keyof LogEntry`
+  to `string`, so `Omit` no longer knows `level`/`label` are required. Reproduced from a clean
+  base (0 errors) to a real `tsc`/`pnpm build` failure immediately after adding this file, then
+  fixed by splitting the index-signature type out (`LogFields`) from the full entry type.
+- **NestJS**: `JWT_EXPIRES_IN: z.string()` was too wide for `@nestjs/jwt`'s actual `expiresIn`
+  type, which wants a number of seconds or `ms`'s branded `StringValue` — confirmed via a real
+  `tsc` error. The first fix attempt (`import { ms, type StringValue } from 'ms'`) was itself
+  wrong: `ms`'s published `latest` tag is still 2.x (the `StringValue`-exporting rewrite is
+  unreleased, only on `beta`/`canary`/`nightly` tags) — caught by checking `npm view ms
+  dist-tags` directly rather than trusting docs describing the unreleased version. Corrected to
+  the real 2.x shape: default import, `@types/ms` (which backports `StringValue` as a namespace
+  member) added as an **explicit** devDependency, since pnpm's strict `node_modules` won't
+  expose a transitive-only `@types` package to `tsc`.
+- **NestJS**: Kysely's `Migrator`/`FileMigrationProvider` moved to a `kysely/migration` subpath
+  in the installed version — the root export is now a self-documenting compile-time redirect
+  (`KyselyTypeError<"import from 'kysely/migration' instead">`). Fixed the import split; a
+  cascading `implicitly has an 'any' type` on the migration-results callback resolved
+  automatically once the root cause was fixed.
+- **NestJS**: the base `eslint.config.mjs` never configured `argsIgnorePattern: '^_'` (unlike
+  Next.js's, which does) even though skill files rely on the `_`-prefix "intentionally unused"
+  convention (e.g. the auth skill's stub methods) — a real `eslint` run surfaced two false
+  failures. Added the same rule override Next.js already has.
+- **NestJS**: the Kysely and Mongoose IAM database variants added their env vars
+  (`DATABASE_HOST`/`PORT`/`USER`/`NAME`, `RDS_CA_BUNDLE_PATH`, `MONGODB_HOST`/`DB_NAME`) via raw
+  `process.env.X!` instead of `envSchema`, inconsistent with the convention applied everywhere
+  else this session. Brought in line (also updated the byte-equality-guarded `migrate/` copy and
+  the lint script's anchor text so the drift check keeps working).
+- **Next.js**: the auth skill's dev-login bypass was non-functional out of the box —
+  `dev@local` fails better-auth's own email validator (rejects single-label domains) on both
+  sign-in and sign-up, confirmed via live `POST` requests returns `400 INVALID_EMAIL`. Fixed the
+  domain and added a check on the sign-up fallback's own error so a double failure no longer
+  redirects to a page the user isn't actually authenticated for.
+- **Next.js**: "better-auth uses stateless JWE-encrypted cookie sessions — no database
+  required" is misleading — omitting `database` actually falls back to `@better-auth/
+  memory-adapter` (volatile, in-process). Confirmed both empirically (signed up, restarted the
+  server, login failed — account gone) and against better-auth's own source comment ("memory
+  adapter (volatile in-memory storage)"), which contradicts a "Stateless Auth" blog post's own
+  framing of the same fallback. Reworded to describe the actual behavior (non-persistent,
+  single-instance-only) rather than repeat the misleading "stateless" framing.
+- **Next.js**: `sonarjs/no-hardcoded-passwords` (from this session's earlier `sonarjs.configs.
+  recommended` adoption) fires on the auth skill's `DEV_PASSWORD` constant, breaking `pnpm
+  check` for anyone following the skill exactly — confirmed via a real `eslint` run. Added a
+  scoped `eslint-disable-next-line` with a reason, matching this repo's established
+  "suppress the instance, not the rule" convention.
+
+---
+
 ## [5.14.0] — 2026-08-05
 
 ### Fixed — full-repo audit (all four stacks)

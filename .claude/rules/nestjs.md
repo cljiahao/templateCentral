@@ -5,7 +5,7 @@ paths:
 
 # NestJS Rules
 
-Stack: NestJS 11, Fastify adapter (≥v5 — requires `@nestjs/platform-fastify ≥11.1.27`; below 11.1.24 has a trailing-slash auth-bypass advisory), Zod + nestjs-zod, Swagger, TypeScript 6, Node.js ≥24, Vitest, Docker. Database (via `templatecentral:add (database)`): Drizzle ORM v1 (pre-release RC — pin the exact RC, e.g. `"drizzle-orm": "1.0.0-rc.4"`). Package manager: **pnpm 11** (pinned in `packageManager` field). Native addons: add `allowBuilds:\n  <pkg>: true` to `pnpm-workspace.yaml` (pnpm 11 no longer reads the `pnpm` field from `package.json`).
+Stack: NestJS 11, Fastify adapter (≥v5 — requires `@nestjs/platform-fastify ≥11.1.28`; below 11.1.24 has a trailing-slash auth-bypass advisory), Zod + nestjs-zod, Swagger, TypeScript 6, Node.js ≥24, Vitest, Docker. Database (via `templatecentral:add (database)`): Drizzle ORM v1 (pre-release RC — pin the exact RC, e.g. `"drizzle-orm": "1.0.0-rc.4"`). Package manager: **pnpm 11** (pinned in `packageManager` field). Native addons: add `allowBuilds:\n  <pkg>: true` to `pnpm-workspace.yaml` (pnpm 11 no longer reads the `pnpm` field from `package.json`).
 
 ## Boundaries
 

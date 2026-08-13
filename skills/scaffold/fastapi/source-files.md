@@ -46,12 +46,16 @@ def run_api() -> None:
     from core.config import api_settings, common_settings
     from core.logging import logger
 
-    host = "0.0.0.0"
+    host = "0.0.0.0"  # noqa: S104 — container-bound; only reachable via the reverse proxy
     port = api_settings.API_PORT
     reload = common_settings.ENVIRONMENT not in ["prod", "uat"]
 
     logger.info(f"Starting server at http://{host}:{port} with reload={reload}")
-    uvicorn.run("app:app", host=host, port=port, reload=reload)
+    # log_config=None — uvicorn's own default LOGGING_CONFIG installs handlers directly on
+    # the uvicorn/uvicorn.access loggers with propagate=False, which bypasses the root
+    # handler setup_logging() configures. Without this, uvicorn's own startup/access logs
+    # never go through structlog's JSON formatting in prod, only app-level logger calls do.
+    uvicorn.run("app:app", host=host, port=port, reload=reload, log_config=None)
 
 
 if __name__ == "__main__":
@@ -73,22 +77,36 @@ from api.routes import router
 from core.config import api_settings, common_settings
 from error_handler import configure_exceptions
 
-_SECURITY_HEADERS = [
-    (b"strict-transport-security", b"max-age=31536000; includeSubDomains"),
-    (b"x-content-type-options", b"nosniff"),
-    (b"x-frame-options", b"DENY"),
-    (b"referrer-policy", b"strict-origin-when-cross-origin"),
-    (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
-    (
-        b"x-xss-protection",
-        b"0",
-    ),  # Disable legacy XSS auditor (exploitable in older browsers)
-    # CSP baseline — tighten after auth/analytics are wired. frame-ancestors replaces X-Frame-Options for CSP2+ browsers.
-    (
-        b"content-security-policy",
-        b"frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
-    ),
-]
+
+def _build_security_headers() -> list[tuple[bytes, bytes]]:
+    # Anti-clickjacking (X-Frame-Options, CSP frame-ancestors) is skipped in dev — the
+    # built-in docs UI at /docs is otherwise blocked from rendering in IDE-embedded preview
+    # panes (most render via <iframe>, and browsers enforce these headers even for localhost).
+    # Full protection still applies in every deployed environment (prod, uat).
+    is_dev = common_settings.ENVIRONMENT == "dev"
+    headers = [
+        (b"strict-transport-security", b"max-age=31536000; includeSubDomains"),
+        (b"x-content-type-options", b"nosniff"),
+        (b"referrer-policy", b"strict-origin-when-cross-origin"),
+        (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
+        (
+            b"x-xss-protection",
+            b"0",
+        ),  # Disable legacy XSS auditor (exploitable in older browsers)
+        # CSP baseline — tighten after auth/analytics are wired. frame-ancestors replaces X-Frame-Options for CSP2+ browsers.
+        (
+            b"content-security-policy",
+            b"base-uri 'self'; object-src 'none'"
+            if is_dev
+            else b"frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
+        ),
+    ]
+    if not is_dev:
+        headers.append((b"x-frame-options", b"DENY"))
+    return headers
+
+
+_SECURITY_HEADERS = _build_security_headers()
 
 
 class SecurityHeadersMiddleware:
@@ -204,11 +222,18 @@ def start_application() -> FastAPI:
     Returns:
         The initialized and configured FastAPI application instance.
     """
+    # Setting openapi_url=None also auto-disables docs_url/redoc_url — set all three
+    # explicitly so the intent reads clearly at the call site. Schema/docs disclosure in
+    # prod is an unnecessary attack-surface/information-disclosure risk.
+    is_dev = common_settings.ENVIRONMENT == "dev"
     app = FastAPI(
         title=common_settings.PROJECT_NAME,
         version=common_settings.PROJECT_VERSION,
         description=textwrap.dedent(common_settings.PROJECT_DESCRIPTION),
         root_path=f"/{api_settings.FASTAPI_ROOT}" if api_settings.FASTAPI_ROOT else "",
+        docs_url="/docs" if is_dev else None,
+        redoc_url="/redoc" if is_dev else None,
+        openapi_url="/openapi.json" if is_dev else None,
         swagger_ui_parameters={
             "defaultModelsExpandDepth": -1,  # Hide models section by default
             "docExpansion": "none",  # Collapse all sections by default
@@ -406,13 +431,9 @@ api_settings = APISettings()
 class InvalidInputError(Exception):
     """Raised when user input fails domain validation (maps to 400)."""
 
-    pass
-
 
 class NoResultsFound(Exception):
     """Raised when a lookup yields no results (maps to 404)."""
-
-    pass
 ```
 
 ### `src/core/logging.py`
@@ -576,6 +597,22 @@ logger: structlog.stdlib.BoundLogger = structlog.stdlib.get_logger(
 )
 ```
 
+### `src/core/uvicorn_log_config.json`
+
+> Passed to the `uvicorn` CLI via `--log-config` in `docker-entrypoint.sh` (the CLI bypasses `main.py`, so `uvicorn.run(..., log_config=None)` there doesn't apply). uvicorn's own default logging config installs handlers directly on the `uvicorn`/`uvicorn.access` loggers with `propagate: false`, which bypasses the root handler `setup_logging()` configures — this file clears those handlers and re-enables propagation so uvicorn's startup/access logs go through the same structlog JSON formatting as app-level `logger.info(...)` calls.
+
+```json
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "loggers": {
+    "uvicorn": { "handlers": [], "propagate": true },
+    "uvicorn.error": { "handlers": [], "propagate": true },
+    "uvicorn.access": { "handlers": [], "propagate": true }
+  }
+}
+```
+
 ### `src/core/directory_manager.py`
 
 ```python
@@ -670,7 +707,6 @@ router.include_router(example.router, tags=[APITags.EXAMPLE])
     tags=[APITags.MISC],
     summary="Home Route",
     description="A simple home route returning a welcome message.",
-    response_model=dict[str, str],
 )
 async def home() -> dict[str, str]:
     return {"msg": "Hello FastAPI"}
@@ -681,7 +717,6 @@ async def home() -> dict[str, str]:
     tags=[APITags.MISC],
     summary="Health Check",
     description="A simple health check returning an OK status.",
-    response_model=dict[str, str],
 )
 async def health() -> dict[str, str]:
     return {"status": "OK"}
@@ -720,7 +755,6 @@ router = APIRouter()
 
 @router.post(
     "/example",
-    response_model=ExampleResponse,
     summary="Example endpoint",
     description="An example endpoint demonstrating the router → service → logic flow.",
 )
@@ -758,8 +792,6 @@ class BaseSchema(BaseModel):
 
 class BaseRequestSchema(BaseSchema):
     """Base for API request schemas."""
-
-    pass
 
 
 class BaseResponseSchema(BaseSchema):
@@ -872,14 +904,10 @@ from dataclasses import dataclass
 class BaseModel:
     """Base for mutable domain models (state that changes during processing)."""
 
-    pass
-
 
 @dataclass(frozen=True, slots=True)
 class BaseImmutableModel:
     """Base for immutable domain models (config, lookup data, parameters)."""
-
-    pass
 ```
 
 ### `src/utils/__init__.py`
@@ -919,8 +947,8 @@ from fastapi.testclient import TestClient
 from app import app
 
 
-@pytest.fixture()
-def client() -> Generator[TestClient, None, None]:
+@pytest.fixture
+def client() -> Generator[TestClient]:
     """FastAPI test client."""
     with TestClient(app) as client:
         yield client

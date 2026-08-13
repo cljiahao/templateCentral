@@ -125,7 +125,7 @@ import { createContext, useCallback, useEffect, useMemo, useState, type ReactNod
 import { fetchCurrentUser, logoutUser } from '../api/auth-service';
 import type { AuthUser } from '../types';
 
-const DEV_USER: AuthUser = {
+export const DEV_USER: AuthUser = {
   id: 'dev',
   name: 'Dev User',
   email: 'dev@local',
@@ -203,6 +203,7 @@ import { PAGE_ROUTES } from '@/lib/constants/routes';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { loginWithCredentials } from '../api/auth-service';
+import { DEV_USER } from './auth-provider';
 import { useAuth } from '../hooks/use-auth';
 
 const loginSchema = z.object({

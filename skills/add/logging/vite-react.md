@@ -107,7 +107,11 @@ Batched delivery to a backend `/logs` endpoint with console-JSON fallback in dev
 // src/lib/logging/log-batcher.ts
 import { getApiBaseUrl } from '@/lib/constants/env';
 
-type LogEntry = { level: string; label: string; timestamp: string; [k: string]: unknown };
+// Omit<LogEntry, 'timestamp'> would NOT work here: a `[k: string]: unknown` index signature
+// collapses `keyof LogEntry` to `string`, so Omit silently drops the requirement that
+// level/label be present. Split the index-signature part out instead.
+type LogFields = { level: string; label: string; [k: string]: unknown };
+type LogEntry = LogFields & { timestamp: string };
 
 const queue: LogEntry[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -144,7 +148,7 @@ function flush(): void {
   // the next enqueueLog call (size gate) or next visibilitychange — never silently dropped.
 }
 
-export function enqueueLog(entry: Omit<LogEntry, 'timestamp'>): void {
+export function enqueueLog(entry: LogFields): void {
   queue.push({ ...entry, timestamp: new Date().toISOString() });
   if (flushTimer === null) {
     flushTimer = setTimeout(() => {
@@ -166,14 +170,12 @@ function flushAll(): void {
 
 // Flush on page unload so buffered logs are not lost.
 // pagehide fires on bfcache/navigation where visibilitychange may not — register both.
-if (typeof window !== 'undefined') {
-  window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') flushAll();
-  });
-  window.addEventListener('pagehide', () => {
-    flushAll();
-  });
-}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushAll();
+});
+window.addEventListener('pagehide', () => {
+  flushAll();
+});
 ```
 
 Wire `enqueueLog` into `logError` and `logEvent`:

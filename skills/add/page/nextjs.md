@@ -94,13 +94,14 @@ The `error` prop contains the thrown error (with an optional `digest` for server
 import { useEffect } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { logError } from '@/lib/errors/error-log-handler';
 
 export default function AnalyticsError({ error, reset }: {
   error: Error & { digest?: string };
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error(error);
+    logError('dashboard.analytics.error-boundary', error);
   }, [error]);
 
   return (

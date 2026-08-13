@@ -41,7 +41,7 @@ Write these files exactly as shown.
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.17.0",
-    "next": "^16.2.11",
+    "next": "^16.2.12",
     "next-themes": "^0.4.6",
     "pino": "^10.3.1",
     "react": "^19.2.7",
@@ -60,7 +60,7 @@ Write these files exactly as shown.
     "@types/react-dom": "^19.2.0",
     "@vitest/coverage-v8": "^4.1.8",
     "eslint": "^9.0.0",
-    "eslint-config-next": "^16.2.11",
+    "eslint-config-next": "^16.2.12",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-sonarjs": "4.1.0",
     "lefthook": "^2.1.9",
@@ -140,17 +140,22 @@ console.log(`Route logging check passed (${files.length} route file(s)).`);
 
 > Next.js 16 ships `eslint-config-next` as native flat configs — `FlatCompat` causes circular JSON crashes. Import the flat config objects directly and spread them. `pnpm check` runs `eslint .`, so this file must exist.
 
+> `sonarjs.configs.recommended` enables ~206 of the plugin's 268 rules at `error` (bugs, security, code smell, tests, React/JSX) — see `templatecentral:standards` code-standards notes for the two scoping overrides below. Mixing `sonarjs.configs.recommended` with a separate `plugins: { sonarjs }` block throws `Cannot redefine plugin "sonarjs"`; every block touching sonarjs rules must reuse the same `sonarjsPlugin` reference. `eslint-plugin-sonarjs` is pinned exact (`4.1.0`, no caret) below — `configs.recommended`'s enabled-rule set is not stable across minor versions (4.2.0 enables ~217 of 280 rules, a different set); bump deliberately and re-verify, don't let `pnpm install` silently resolve a newer minor.
+
 ```javascript
 import coreWebVitals from 'eslint-config-next/core-web-vitals';
 import typescript from 'eslint-config-next/typescript';
 import sonarjs from 'eslint-plugin-sonarjs';
 
+const sonarjsPlugin = sonarjs.configs.recommended.plugins.sonarjs;
+
 const config = [
   ...coreWebVitals,
   ...typescript,
   {
-    plugins: { sonarjs },
+    ...sonarjs.configs.recommended,
     rules: {
+      ...sonarjs.configs.recommended.rules,
       // Honour the `_`-prefix convention for intentionally-unused args/vars.
       '@typescript-eslint/no-unused-vars': [
         'warn',
@@ -161,7 +166,24 @@ const config = [
         'error',
         { ignorePattern: 'eslint-|@ts-|prettier-|c8 |istanbul |webpackChunkName' },
       ],
+      // recommended leaves this off; templateCentral's comment-hygiene gate requires it.
       'sonarjs/no-commented-code': 'error',
+    },
+  },
+  {
+    // shadcn/ui primitives are generated, not hand-edited — prefer-read-only-props
+    // fires on their prop typing and can't be fixed without diverging from `shadcn add` output.
+    files: ['src/components/ui/**/*.{ts,tsx}'],
+    plugins: { sonarjs: sonarjsPlugin },
+    rules: { 'sonarjs/prefer-read-only-props': 'off' },
+  },
+  {
+    // Test fixtures legitimately use fake secrets and http:// literals to exercise guards.
+    files: ['test/**/*.{test,spec}.{ts,tsx}', 'src/**/*.test.{ts,tsx}'],
+    plugins: { sonarjs: sonarjsPlugin },
+    rules: {
+      'sonarjs/no-hardcoded-secrets': 'off',
+      'sonarjs/no-clear-text-protocols': 'off',
     },
   },
   { ignores: ['.next/**', 'node_modules/**', 'next-env.d.ts', '.claude/**'] },
@@ -218,11 +240,16 @@ const nextConfig: NextConfig = {
   // },
 
   async headers() {
+    // Anti-clickjacking headers (X-Frame-Options, CSP frame-ancestors) are omitted in dev —
+    // they apply during `next dev` too (including under Turbopack), and browsers enforce them
+    // even for localhost, which blocks IDE-embedded preview panes (most render via <iframe>).
+    // Full protection still applies in every deployed environment (prod, uat, preview builds).
+    const isDev = process.env.NODE_ENV === 'development';
     return [
       {
         source: '/(.*)',
         headers: [
-          { key: 'X-Frame-Options', value: 'DENY' },
+          ...(isDev ? [] : [{ key: 'X-Frame-Options', value: 'DENY' }]),
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
@@ -230,7 +257,12 @@ const nextConfig: NextConfig = {
           // HSTS — browsers ignore HSTS received over HTTP, so this is only effective over HTTPS.
           { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
           // CSP baseline — tighten after auth/analytics are wired. frame-ancestors replaces X-Frame-Options for CSP2+ browsers.
-          { key: 'Content-Security-Policy', value: "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'" },
+          {
+            key: 'Content-Security-Policy',
+            value: isDev
+              ? "base-uri 'self'; object-src 'none'; form-action 'self'"
+              : "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'",
+          },
         ],
       },
     ];

@@ -114,6 +114,10 @@ Same-change Vitest for controllers, services, repositories, HTTP guards/pipes (`
 - JSDoc on exported providers/controllers/DTOs describes the contract — not the implementation.
 - The comment gate is seeded as a hard gate (`error`, not a warning) in `eslint.config.mjs`: `no-inline-comments: 'error'` (with an `ignorePattern` for `eslint-`/`@ts-`/`prettier-`/coverage directives) enforces own-line comments, and `sonarjs/no-commented-code: 'error'` blocks commented-out code. Both fail lint/CI.
 
+### Static Analysis (`eslint-plugin-sonarjs`)
+
+`eslint.config.mjs` extends `sonarjs.configs.recommended` (~206 of the plugin's 268 rules, at `error`) covering bugs, hardcoded secrets/weak crypto/insecure JWT/cookies, and code smells — this is the tier that matters most here since NestJS owns request validation and auth. Test files (`test/**`, `**/*.spec.ts`, `**/*.e2e-spec.ts`) turn off `no-hardcoded-secrets` / `no-clear-text-protocols` so fake fixtures don't false-positive. `no-duplicate-string` and `max-switch-cases` are left at the plugin's own defaults, not hand-tuned.
+
 ### Security (NestJS)
 
 **Environment & Secrets**

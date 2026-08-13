@@ -132,13 +132,21 @@ export class GithubIntegrationService {
 
 #### 4. Add Config
 
-Add the API token to `serviceConfig` in **`src/config/env.config.ts`**:
+Add the API token to `envSchema` in **`src/config/env.config.ts`** — validated at import time, so boot fails loudly if it's missing instead of surfacing as a runtime `undefined`:
+
+```typescript
+const envSchema = z.object({
+  // ... existing fields ...
+  GITHUB_API_URL: z.string().min(1).default('https://api.github.com'),
+  GITHUB_TOKEN: z.string().min(1),
+});
+```
 
 ```typescript
 export const serviceConfig = {
   // ... existing fields ...
-  GITHUB_API_URL: process.env.GITHUB_API_URL ?? 'https://api.github.com',
-  GITHUB_TOKEN: process.env.GITHUB_TOKEN!,
+  GITHUB_API_URL: env.GITHUB_API_URL,
+  GITHUB_TOKEN: env.GITHUB_TOKEN,
 };
 ```
 
@@ -152,17 +160,6 @@ Document in `.env.example` (placeholder for documentation):
 ```
 GITHUB_API_URL=https://api.github.com
 GITHUB_TOKEN=your_github_token_here
-```
-
-**Add a startup guard in `src/main.ts`** — the `!` assertion is erased at compile time and does NOT throw at runtime if the variable is missing:
-
-```typescript
-async function bootstrap() {
-  if (!serviceConfig.GITHUB_TOKEN) {
-    throw new Error('GITHUB_TOKEN environment variable is required');
-  }
-  // ... rest of bootstrap
-}
 ```
 
 NEVER use a fallback like `?? ''` for tokens — fail fast at startup instead.

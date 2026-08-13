@@ -46,6 +46,7 @@ import {
   Get,
   Post,
   Param,
+  PayloadTooLargeException,
   Query,
   Req,
   HttpCode,
@@ -119,9 +120,15 @@ export class ProjectsController {
       throw new BadRequestException('File type not allowed');
     }
 
-    // toBuffer() throws once the stream exceeds limits.fileSize (set at registration) —
-    // no manual size check needed.
-    const buffer = await data.toBuffer();
+    // toBuffer() throws once the stream exceeds limits.fileSize (set at registration).
+    // That's a plain Error, not an HttpException — it bypasses HttpExceptionFilter and
+    // falls through as an unformatted 500 unless converted at this boundary.
+    let buffer: Buffer;
+    try {
+      buffer = await data.toBuffer();
+    } catch {
+      throw new PayloadTooLargeException('File exceeds the maximum allowed size');
+    }
 
     // data.filename is attacker-controlled: it can contain `../`, absolute paths, or
     // NUL bytes, so it must NEVER become part of a storage path. The storage key is

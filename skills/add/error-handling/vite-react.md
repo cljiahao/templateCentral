@@ -48,8 +48,9 @@ import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 import { logError } from '@/lib/errors/error-log-handler';
 
 export const queryClient = new QueryClient({
-  // Cache-level onError always fires — a per-query/per-mutation onError would
-  // silently replace a handler placed in defaultOptions.
+  // Cache-level onError always fires — a per-mutation onError (useMutation still
+  // supports one; useQuery does not, as of TanStack Query v5) would silently
+  // replace a handler placed in defaultOptions.
   queryCache: new QueryCache({
     onError: (error, query) => {
       if (error instanceof Error) {

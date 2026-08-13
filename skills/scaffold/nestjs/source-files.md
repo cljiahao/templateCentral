@@ -20,15 +20,21 @@ import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { appConfig, setupCors, setupSecurity, setupSwagger } from './config';
 
+// Fastify trustProxy: "*" → trust all; number = hop count (1 = one-hop ALB→App, 2 = two-hop ALB→Traefik→App); CIDR string = trusted range.
+function resolveTrustProxy(
+  value: string | undefined,
+): boolean | number | string | undefined {
+  let trustProxy: boolean | number | string | undefined = value;
+  if (value === '*') {
+    trustProxy = true;
+  } else if (value && /^\d+$/.test(value)) {
+    trustProxy = parseInt(value, 10);
+  }
+  return trustProxy;
+}
+
 async function bootstrap(): Promise<void> {
-  const trustProxyEnv = process.env.TRUST_PROXY;
-  // Fastify trustProxy: "*" → trust all; number = hop count (1 = one-hop ALB→App, 2 = two-hop ALB→Traefik→App); CIDR string = trusted range.
-  const trustProxy: boolean | number | string | undefined =
-    trustProxyEnv === '*'
-      ? true
-      : trustProxyEnv && /^\d+$/.test(trustProxyEnv)
-        ? parseInt(trustProxyEnv, 10)
-        : trustProxyEnv;
+  const trustProxy = resolveTrustProxy(appConfig.TRUST_PROXY);
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(trustProxy ? { trustProxy } : {}),
@@ -77,7 +83,7 @@ import { appConfig } from './config';
   imports: [
     LoggerModule.forRoot({
       pinoHttp: {
-        level: process.env.LOG_LEVEL ?? 'info',
+        level: appConfig.LOG_LEVEL,
         // correlation ID
         genReqId: () => crypto.randomUUID(),
         // pino-http's default serializer logs the whole headers object at info level.
@@ -216,6 +222,11 @@ const envSchema = z.object({
   ENVIRONMENT: z.enum(['dev', 'uat', 'prod']).default('dev'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   CLIENT_URL: z.string().min(1).default('http://localhost:3000'),
+  // Reverse proxy trust: hop count, CIDR, or "*" — see main.ts's resolveTrustProxy().
+  TRUST_PROXY: z.string().optional(),
+  LOG_LEVEL: z
+    .enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'])
+    .default('info'),
 });
 
 // An empty value in `.env` means "not set" — drop it so the schema default applies.
@@ -241,6 +252,8 @@ export const appConfig = {
   PROJECT_VERSION: env.PROJECT_VERSION,
   ENVIRONMENT: env.ENVIRONMENT,
   PORT: env.PORT,
+  TRUST_PROXY: env.TRUST_PROXY,
+  LOG_LEVEL: env.LOG_LEVEL,
 };
 
 export const serviceConfig = {
@@ -271,10 +284,16 @@ export * from './setups/security.setup';
 import fastifyHelmet from '@fastify/helmet';
 import type { INestApplication } from '@nestjs/common';
 import type { FastifyInstance } from 'fastify';
-import { serviceConfig } from '../env.config';
+import { appConfig, serviceConfig } from '../env.config';
 
 export async function setupSecurity(app: INestApplication): Promise<void> {
   const fastify = app.getHttpAdapter().getInstance() as FastifyInstance;
+
+  // Anti-clickjacking (frame-ancestors, X-Frame-Options) is skipped in dev — Swagger UI at
+  // /docs is otherwise blocked from rendering in IDE-embedded preview panes (most render via
+  // <iframe>, and browsers enforce these headers even for localhost). Full protection still
+  // applies in every deployed environment (prod, uat).
+  const isDev = appConfig.ENVIRONMENT === 'dev';
 
   await fastify.register(fastifyHelmet, {
     crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -286,13 +305,18 @@ export async function setupSecurity(app: INestApplication): Promise<void> {
         'img-src': ["'self'", 'data:', 'https:'],
         'object-src': ["'none'"],
         'base-uri': ["'none'"],
-        'frame-ancestors': ["'none'"],
+        // null omits the directive from the emitted header — an empty array does not:
+        // Helmet's own default for an unset frame-ancestors is 'self', which would still
+        // block a cross-origin IDE-preview iframe.
+        'frame-ancestors': isDev ? null : ["'none'"],
       },
     },
     // HSTS
     strictTransportSecurity: { maxAge: 31536000, includeSubDomains: true },
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
-    xFrameOptions: { action: 'deny' },
+    // frameguard sets X-Frame-Options (xFrameOptions is an equivalent alias). action must be
+    // lowercase — 'deny' | 'sameorigin', not 'DENY' — per @fastify/helmet's actual type.
+    frameguard: isDev ? false : { action: 'deny' },
   });
 
   fastify.addHook('onSend', async (_request, reply, payload) => {

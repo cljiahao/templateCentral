@@ -1,5 +1,5 @@
-<!-- ref: write-skill/implementation.md
-     loaded-by: write-skill/SKILL.md
+<!-- ref: tc-write-skill/implementation.md
+     loaded-by: tc-write-skill/SKILL.md
      prereq: Skill authoring checklist. Do not invoke this file directly — it is loaded at runtime by the /tc-write-skill skill. -->
 
 # Write a templateCentral Skill
